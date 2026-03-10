@@ -99,6 +99,7 @@ dependencies = [
 [project.scripts]
 opentau-train = "opentau.scripts.launch:train"
 opentau-eval = "opentau.scripts.launch:eval"
+opentau-hierarchical-eval = "opentau.scripts.launch:hierarchical_eval"
 opentau-export = "opentau.scripts.launch:export"
 opentau-dataset-viz = "opentau.scripts.launch:visualize"
 
