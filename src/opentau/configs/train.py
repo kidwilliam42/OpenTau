@@ -31,7 +31,7 @@ from huggingface_hub import hf_hub_download
 from huggingface_hub.errors import HfHubHTTPError
 
 from opentau.configs import parser
-from opentau.configs.default import DatasetMixtureConfig, EvalConfig, WandBConfig
+from opentau.configs.default import DatasetMixtureConfig, EvalConfig, HierarchicalConfig, WandBConfig
 from opentau.configs.deployment import ServerConfig
 from opentau.configs.policies import PreTrainedConfig
 from opentau.envs.configs import EnvConfig
@@ -164,6 +164,7 @@ class TrainPipelineConfig(HubMixin):
     # optional environment and evaluation config for evaluation
     env: EnvConfig | None = None
     eval: EvalConfig | None = field(default_factory=EvalConfig)
+    hierarchical: HierarchicalConfig = field(default_factory=HierarchicalConfig)
     eval_freq: int = 0  # evaluate every eval_freq steps
     val_freq: int = 0  # validate every val_freq steps, if 0, then a validation split is not created
     last_checkpoint_only: bool = True

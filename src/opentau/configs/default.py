@@ -297,3 +297,25 @@ class EvalConfig:
                 f"to increase the number of episodes to match the batch size (e.g. `eval.n_episodes={self.batch_size}`), "
                 f"or lower the batch size (e.g. `eval.batch_size={self.n_episodes}`)."
             )
+
+
+@dataclass
+class HierarchicalConfig:
+    """Configuration for online hierarchical planning/evaluation.
+
+    Args:
+        model_name: Hugging Face model id for the high-level planner.
+        subtask_steps: Default per-subtask environment step budget before replanning.
+        max_subtasks: Maximum number of replanning rounds/subtasks per episode.
+    """
+
+    model_name: str = "Qwen/Qwen3-VL-4B-Instruct"
+    subtask_steps: int = 15
+    max_subtasks: int = 20
+
+    def __post_init__(self):
+        """Validate hierarchical planning configuration."""
+        if self.subtask_steps < 1:
+            raise ValueError(f"`subtask_steps` must be >= 1, got {self.subtask_steps}.")
+        if self.max_subtasks < 1:
+            raise ValueError(f"`max_subtasks` must be >= 1, got {self.max_subtasks}.")

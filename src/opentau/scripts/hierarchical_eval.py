@@ -22,11 +22,6 @@ from opentau.policies.factory import make_policy
 from opentau.utils.random_utils import set_seed
 from opentau.utils.utils import auto_torch_device, init_logging
 
-DEFAULT_QWEN_MODEL = "Qwen/Qwen3-VL-4B-Instruct"
-DEFAULT_SUBTASK_STEPS = 15
-DEFAULT_MAX_SUBTASKS = 20
-
-
 def _get_single_env(envs: dict[str, dict[int, Any]]):
     """
     Minimal hierarchical eval only supports one vectorized env entry.
@@ -97,8 +92,8 @@ def _run_single_episode(
     low_level_policy,
     episode_idx: int,
     task_text: str,
-    planner_default_subtask_steps: int = DEFAULT_SUBTASK_STEPS,
-    max_subtasks: int = DEFAULT_MAX_SUBTASKS,
+    planner_default_subtask_steps: int,
+    max_subtasks: int,
     seed: int | None = None,
 ) -> dict[str, Any]:
     """
@@ -217,9 +212,9 @@ def hierarchical_eval_main(cfg: TrainPipelineConfig):
 
     logging.info("Making Qwen high-level planner.")
     planner = QwenHighLevelPlanner(
-        model_name=DEFAULT_QWEN_MODEL,
+        model_name=cfg.hierarchical.model_name,
         device=device,
-        default_subtask_steps=DEFAULT_SUBTASK_STEPS,
+        default_subtask_steps=cfg.hierarchical.subtask_steps,
     )
 
     base_output_dir = Path(cfg.output_dir) if cfg.output_dir is not None else Path("outputs")
@@ -238,8 +233,8 @@ def hierarchical_eval_main(cfg: TrainPipelineConfig):
                 low_level_policy=low_level_policy,
                 episode_idx=episode_idx,
                 task_text=task_text,
-                planner_default_subtask_steps=DEFAULT_SUBTASK_STEPS,
-                max_subtasks=DEFAULT_MAX_SUBTASKS,
+                planner_default_subtask_steps=cfg.hierarchical.subtask_steps,
+                max_subtasks=cfg.hierarchical.max_subtasks,
                 seed=episode_seed,
             )
             episode_results.append(result)
