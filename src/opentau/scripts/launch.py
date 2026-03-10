@@ -75,6 +75,16 @@ def eval():
     launch(eval_script, "Launch OpenTau evaluation with Accelerate")
 
 
+def hierarchical_eval():
+    import opentau.scripts.hierarchical_eval as hierarchical_eval_script
+
+    launch(
+        hierarchical_eval_script,
+        "Launch OpenTau hierarchical evaluation",
+        use_accelerate=False,
+    )
+
+
 def export():
     import opentau.scripts.export_to_onnx as export_script
 

@@ -43,6 +43,8 @@ Main Classes:
       interface with inference and cost calculation methods.
     - **HighLevelPlanner**: Planner for manipulation tasks, supporting both
       GPT-4o and open-source vision-language models (CogVLM, SmolVLM variants).
+    - **QwenHighLevelPlanner**: Planner for online single-subtask manipulation
+      planning using Qwen3-VL-4B.
     - **NavHighLevelPlanner**: Specialized planner for navigation tasks with
       support for processing multiple camera views.
     - **Memory**: Conversation history manager that stores and retrieves
@@ -53,6 +55,7 @@ Supported Models:
     - **Open-source**: CogVLM-Chat-HF, SmolVLM-256M-Instruct,
       SmolVLM-500M-Instruct, SmolVLM2-2.2B-Instruct
     - **Closed-source**: GPT-4o (via OpenAI API)
+    - **Open-source online planning**: Qwen3-VL-4B-Instruct
 
 Modules:
 
@@ -79,4 +82,5 @@ Example:
 
 from .high_level_planner import HighLevelPlanner as HighLevelPlanner
 from .high_level_planner import NavHighLevelPlanner as NavHighLevelPlanner
+from .qwen3_vl_planner import QwenHighLevelPlanner as QwenHighLevelPlanner
 from .utils.memory import Memory as Memory
