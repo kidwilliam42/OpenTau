@@ -65,6 +65,7 @@ def _save_episode_summary(
     task_id: int,
     task_text: str,
     episode_success: bool,
+    hierarchical_config: dict[str, Any],
     agent_state: dict[str, Any],
     episode_reward_sum: float,
     episode_steps: int,
@@ -78,6 +79,7 @@ def _save_episode_summary(
         "success": episode_success,
         "episode_reward_sum": episode_reward_sum,
         "episode_steps": episode_steps,
+        "hierarchical": hierarchical_config,
         "agent_state": agent_state,
     }
 
@@ -222,6 +224,18 @@ def hierarchical_eval_main(cfg: TrainPipelineConfig):
         system_prompt_key=cfg.hierarchical.system_prompt_key,
         user_prompt_key=cfg.hierarchical.user_prompt_key,
     )
+    hierarchical_summary = {
+        "model_name": cfg.hierarchical.model_name,
+        "subtask_steps": cfg.hierarchical.subtask_steps,
+        "min_subtask_steps": cfg.hierarchical.min_subtask_steps,
+        "max_subtask_steps": cfg.hierarchical.max_subtask_steps,
+        "max_subtasks": cfg.hierarchical.max_subtasks,
+        "max_history_items": cfg.hierarchical.max_history_items,
+        "prompt_library_path": cfg.hierarchical.prompt_library_path,
+        "system_prompt_key": cfg.hierarchical.system_prompt_key,
+        "user_prompt_key": cfg.hierarchical.user_prompt_key,
+    }
+    logging.info(f"Hierarchical planner settings: {hierarchical_summary}")
 
     base_output_dir = Path(cfg.output_dir) if cfg.output_dir is not None else Path("outputs")
     details = f"{cfg.env.type}-{cfg.env.task}-hierarchical-{cfg.eval.n_episodes}"
@@ -252,6 +266,7 @@ def hierarchical_eval_main(cfg: TrainPipelineConfig):
                 task_id=task_id,
                 task_text=task_text,
                 episode_success=result["success"],
+                hierarchical_config=hierarchical_summary,
                 agent_state=result["agent_state"],
                 episode_reward_sum=result["episode_reward_sum"],
                 episode_steps=result["episode_steps"],
@@ -271,7 +286,15 @@ def hierarchical_eval_main(cfg: TrainPipelineConfig):
         }
 
         with open(output_dir / "overall.json", "w") as f:
-            json.dump({"overall": overall, "episodes": episode_results}, f, indent=2)
+            json.dump(
+                {
+                    "overall": overall,
+                    "hierarchical": hierarchical_summary,
+                    "episodes": episode_results,
+                },
+                f,
+                indent=2,
+            )
 
         logging.info(f"Hierarchical eval overall: {overall}")
     finally:

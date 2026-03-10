@@ -26,6 +26,18 @@ Relevant files
 - ``src/opentau/scripts/hierarchical_eval.py``
 - ``configs/examples/pi05_hierarchical_eval_config.json``
 
+Saved outputs
+-------------
+
+The hierarchical evaluator saves:
+
+- one JSON summary per episode under ``hierarchical-eval/.../episode_XXXX.json``,
+- one ``overall.json`` file for aggregated metrics.
+
+Both now include a ``hierarchical`` section that records the active planner
+settings, including the selected Qwen model, prompt keys, step budgets, and
+history budget.
+
 How to run
 ----------
 
@@ -113,7 +125,14 @@ Currently two prompt styles are available:
     imperative instructions such as ``approach the block`` or
     ``align gripper to handle``.
 
+``qwen_manipulation_conservative_system`` /
+``qwen_manipulation_conservative_user``
+    A more conservative manipulation prompt that prefers approach/alignment
+    before issuing grasp, release, or place actions.
+
 For manipulation tasks, the shorter prompt pair is the recommended default.
+If the planner tends to overcommit to grasping or repeatedly alternates between
+grasp/release-style commands, try the conservative prompt pair.
 
 Prompt tuning suggestions
 -------------------------
@@ -131,6 +150,13 @@ If planning outputs are too myopic:
 - increase ``subtask_steps`` slightly,
 - or switch back to the more general ``qwen_online_planner_*`` templates.
 
+If planning outputs are too aggressive:
+
+- try ``qwen_manipulation_conservative_*``,
+- reduce ``max_subtask_steps`` so the planner revisits the scene earlier,
+- or reduce ``max_history_items`` if the model keeps anchoring on stale grasp
+  attempts.
+
 Practical starting points
 -------------------------
 
@@ -143,6 +169,13 @@ For short manipulation tasks in LIBERO:
 - ``max_history_items = 6`` to ``10``
 - prompt pair: ``qwen_manipulation_short_system`` /
   ``qwen_manipulation_short_user``
+
+If the model grasps too early or repeats high-risk end-effector actions:
+
+- keep ``subtask_steps`` in the lower half of the range,
+- keep ``max_subtask_steps`` moderate,
+- switch to ``qwen_manipulation_conservative_system`` /
+  ``qwen_manipulation_conservative_user``.
 
 For noisier or longer tasks:
 
