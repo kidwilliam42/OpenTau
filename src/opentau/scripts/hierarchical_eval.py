@@ -217,6 +217,7 @@ def hierarchical_eval_main(cfg: TrainPipelineConfig):
         default_subtask_steps=cfg.hierarchical.subtask_steps,
         min_subtask_steps=cfg.hierarchical.min_subtask_steps,
         max_subtask_steps=cfg.hierarchical.max_subtask_steps,
+        max_history_items=cfg.hierarchical.max_history_items,
         prompt_library_path=cfg.hierarchical.prompt_library_path,
         system_prompt_key=cfg.hierarchical.system_prompt_key,
         user_prompt_key=cfg.hierarchical.user_prompt_key,

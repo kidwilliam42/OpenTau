@@ -309,6 +309,7 @@ class HierarchicalConfig:
         min_subtask_steps: Minimum per-subtask step budget accepted from planner output.
         max_subtask_steps: Maximum per-subtask step budget accepted from planner output.
         max_subtasks: Maximum number of replanning rounds/subtasks per episode.
+        max_history_items: Maximum number of completed subtasks to include in the planner prompt.
         prompt_library_path: YAML path containing planner prompt templates.
         system_prompt_key: Key of the system prompt template inside the YAML file.
         user_prompt_key: Key of the user prompt template inside the YAML file.
@@ -319,6 +320,7 @@ class HierarchicalConfig:
     min_subtask_steps: int = 5
     max_subtask_steps: int = 30
     max_subtasks: int = 20
+    max_history_items: int = 10
     prompt_library_path: str = "src/opentau/planner/qwen_prompts.yaml"
     system_prompt_key: str = "qwen_online_planner_system"
     user_prompt_key: str = "qwen_online_planner_user"
@@ -336,3 +338,5 @@ class HierarchicalConfig:
             )
         if self.max_subtasks < 1:
             raise ValueError(f"`max_subtasks` must be >= 1, got {self.max_subtasks}.")
+        if self.max_history_items < 0:
+            raise ValueError(f"`max_history_items` must be >= 0, got {self.max_history_items}.")
