@@ -8,6 +8,7 @@ import torch
 from PIL import Image
 
 from opentau.agents.hierarchical_agent import ExecutionRecord, SubtaskPlan
+from opentau.planner.utils.utils import load_prompt_library
 
 
 class QwenHighLevelPlanner:
@@ -38,6 +39,9 @@ class QwenHighLevelPlanner:
         min_subtask_steps: int = 5,
         max_subtask_steps: int = 30,
         max_history_items: int = 10,
+        prompt_library_path: str = "src/opentau/planner/qwen_prompts.yaml",
+        system_prompt_key: str = "qwen_online_planner_system",
+        user_prompt_key: str = "qwen_online_planner_user",
     ) -> None:
         self.model_name = model_name
         self.device = str(device) if isinstance(device, torch.device) else device
@@ -46,9 +50,13 @@ class QwenHighLevelPlanner:
         self.min_subtask_steps = min_subtask_steps
         self.max_subtask_steps = max_subtask_steps
         self.max_history_items = max_history_items
+        self.prompt_library_path = prompt_library_path
+        self.system_prompt_key = system_prompt_key
+        self.user_prompt_key = user_prompt_key
 
         self.processor, self.model = self._load_model_and_processor(model_name, self.device)
         self.input_device = torch.device(self.device)
+        self.prompts_dict = self._load_prompts()
 
     def plan_next(
         self,
@@ -144,41 +152,35 @@ class QwenHighLevelPlanner:
         model.eval()
         return processor, model
 
+    def _load_prompts(self) -> dict[str, Any]:
+        """Load planner prompt templates from a YAML file."""
+        prompts_dict = load_prompt_library(self.prompt_library_path)
+        if prompts_dict is None:
+            raise FileNotFoundError(
+                f"Failed to load Qwen prompt library from '{self.prompt_library_path}'."
+            )
+        prompts = prompts_dict.get("prompts", {})
+        if self.system_prompt_key not in prompts:
+            raise KeyError(
+                f"System prompt key '{self.system_prompt_key}' not found in '{self.prompt_library_path}'."
+            )
+        if self.user_prompt_key not in prompts:
+            raise KeyError(
+                f"User prompt key '{self.user_prompt_key}' not found in '{self.prompt_library_path}'."
+            )
+        return prompts_dict
+
     def _system_prompt(self) -> str:
-        return (
-            "You are a robot high-level planner.\n\n"
-            "You are given:\n"
-            "1. the overall task,\n"
-            "2. the current robot-view images,\n"
-            "3. the already executed subtasks.\n\n"
-            "You must output exactly one next subtask for a low-level robot policy.\n\n"
-            "Output JSON only.\n\n"
-            "Schema:\n"
-            "{\n"
-            '  "done": boolean,\n'
-            '  "next_subtask": {\n'
-            '    "instruction": string,\n'
-            '    "max_steps": integer\n'
-            "  }\n"
-            "}\n\n"
-            "Rules:\n"
-            "- Use English.\n"
-            "- The instruction must be short, imperative, and directly executable.\n"
-            "- Do not explain your reasoning.\n"
-            "- Do not output multiple subtasks.\n"
-            '- If the task is already completed, return exactly {"done": true}.\n'
-            "- max_steps should usually be between 5 and 30.\n"
-            "- Do not use markdown fences.\n"
-            "- Return valid JSON only."
+        return self.prompts_dict["prompts"][self.system_prompt_key]["template"].format(
+            min_subtask_steps=self.min_subtask_steps,
+            max_subtask_steps=self.max_subtask_steps,
         )
 
     def _build_user_prompt(self, task: str, history: list[ExecutionRecord]) -> str:
         history_text = self._format_history(history)
-        return (
-            f"Overall task:\n{task}\n\n"
-            f"Executed subtasks:\n{history_text}\n\n"
-            "Look at the current scene and generate the next subtask.\n"
-            "Return JSON only."
+        return self.prompts_dict["prompts"][self.user_prompt_key]["template"].format(
+            task=task,
+            executed_subtasks=history_text,
         )
 
     def _format_history(self, history: list[ExecutionRecord]) -> str:

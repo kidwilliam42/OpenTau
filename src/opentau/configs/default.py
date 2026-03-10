@@ -306,16 +306,33 @@ class HierarchicalConfig:
     Args:
         model_name: Hugging Face model id for the high-level planner.
         subtask_steps: Default per-subtask environment step budget before replanning.
+        min_subtask_steps: Minimum per-subtask step budget accepted from planner output.
+        max_subtask_steps: Maximum per-subtask step budget accepted from planner output.
         max_subtasks: Maximum number of replanning rounds/subtasks per episode.
+        prompt_library_path: YAML path containing planner prompt templates.
+        system_prompt_key: Key of the system prompt template inside the YAML file.
+        user_prompt_key: Key of the user prompt template inside the YAML file.
     """
 
     model_name: str = "Qwen/Qwen3-VL-4B-Instruct"
     subtask_steps: int = 15
+    min_subtask_steps: int = 5
+    max_subtask_steps: int = 30
     max_subtasks: int = 20
+    prompt_library_path: str = "src/opentau/planner/qwen_prompts.yaml"
+    system_prompt_key: str = "qwen_online_planner_system"
+    user_prompt_key: str = "qwen_online_planner_user"
 
     def __post_init__(self):
         """Validate hierarchical planning configuration."""
         if self.subtask_steps < 1:
             raise ValueError(f"`subtask_steps` must be >= 1, got {self.subtask_steps}.")
+        if self.min_subtask_steps < 1:
+            raise ValueError(f"`min_subtask_steps` must be >= 1, got {self.min_subtask_steps}.")
+        if self.max_subtask_steps < self.min_subtask_steps:
+            raise ValueError(
+                "`max_subtask_steps` must be greater than or equal to `min_subtask_steps`. "
+                f"Got {self.max_subtask_steps} < {self.min_subtask_steps}."
+            )
         if self.max_subtasks < 1:
             raise ValueError(f"`max_subtasks` must be >= 1, got {self.max_subtasks}.")

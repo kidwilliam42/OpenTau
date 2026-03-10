@@ -128,7 +128,12 @@
     "hierarchical": {
         "model_name": "Qwen/Qwen3-VL-4B-Instruct",
         "subtask_steps": 15,
-        "max_subtasks": 20
+        "min_subtask_steps": 5,
+        "max_subtask_steps": 30,
+        "max_subtasks": 20,
+        "prompt_library_path": "src/opentau/planner/qwen_prompts.yaml",
+        "system_prompt_key": "qwen_online_planner_system",
+        "user_prompt_key": "qwen_online_planner_user"
     },
     "eval": {
         "n_episodes": 1,
