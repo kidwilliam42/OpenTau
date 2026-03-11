@@ -188,6 +188,19 @@ class HierarchicalAgent:
         self.num_plans_made += 1
 
         if planned is None:
+            # Some VLMs occasionally return "done" on the very first planning step
+            # before any subtask has been executed. Fall back to the original task
+            # so the rollout can proceed instead of terminating immediately.
+            if not self.history:
+                self.current_subtask = SubtaskPlan(
+                    instruction=self.task,
+                    max_steps=self.default_subtask_steps,
+                )
+                self.current_subtask_steps = 0
+                self.needs_planning = False
+                self.low_level_policy.reset()
+                return
+
             self.current_subtask = None
             self.current_subtask_steps = 0
             self.needs_planning = False
