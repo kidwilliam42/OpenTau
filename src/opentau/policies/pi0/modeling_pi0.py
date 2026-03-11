@@ -36,6 +36,7 @@ from opentau.policies.pi0.paligemma_with_expert import (
     PaliGemmaWithExpertModel,
 )
 from opentau.policies.pretrained import PreTrainedPolicy
+from opentau.utils.hub import get_paligemma_load_kwargs, get_paligemma_source
 from opentau.policies.utils import log_model_loading_keys
 from opentau.utils.utils import get_safe_dtype
 
@@ -185,7 +186,10 @@ class PI0Policy(PreTrainedPolicy):
             config.output_features, config.normalization_mapping, dataset_stats
         )
 
-        self.language_tokenizer = AutoTokenizer.from_pretrained("google/paligemma-3b-pt-224")
+        paligemma_source = get_paligemma_source()
+        self.language_tokenizer = AutoTokenizer.from_pretrained(
+            paligemma_source, **get_paligemma_load_kwargs(paligemma_source)
+        )
         self.model = PI0FlowMatching(config)
 
         self.reset()

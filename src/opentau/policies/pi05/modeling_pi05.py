@@ -43,6 +43,7 @@ from opentau.policies.pi05.paligemma_with_expert import (
 )
 from opentau.policies.pretrained import PreTrainedPolicy, T
 from opentau.utils.accelerate_utils import get_proc_accelerator
+from opentau.utils.hub import get_paligemma_load_kwargs, get_paligemma_source
 from opentau.utils.utils import get_safe_dtype
 
 
@@ -264,7 +265,10 @@ class PI05Policy(PreTrainedPolicy):
             config.output_features, config.normalization_mapping, dataset_stats
         )
 
-        self.language_tokenizer = AutoTokenizer.from_pretrained("google/paligemma-3b-pt-224")
+        paligemma_source = get_paligemma_source()
+        self.language_tokenizer = AutoTokenizer.from_pretrained(
+            paligemma_source, **get_paligemma_load_kwargs(paligemma_source)
+        )
 
         self.discrete_action_processor = AutoProcessor.from_pretrained(
             "physical-intelligence/fast", trust_remote_code=True
@@ -913,7 +917,10 @@ class PI05FlowMatching(nn.Module):
         self.time_mlp_in = nn.Linear(self.config.proj_width, self.config.proj_width)
         self.time_mlp_out = nn.Linear(self.config.proj_width, self.config.proj_width)
 
-        self.language_tokenizer = AutoTokenizer.from_pretrained("google/paligemma-3b-pt-224")
+        paligemma_source = get_paligemma_source()
+        self.language_tokenizer = AutoTokenizer.from_pretrained(
+            paligemma_source, **get_paligemma_load_kwargs(paligemma_source)
+        )
 
         self._init_model()
 

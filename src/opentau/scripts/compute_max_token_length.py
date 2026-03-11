@@ -31,6 +31,7 @@ from opentau.datasets.lerobot_dataset import BaseDataset
 from opentau.policies.factory import get_policy_class
 from opentau.policies.pi0.modeling_pi0 import PI0Policy
 from opentau.policies.pi05.modeling_pi05 import PI05Policy
+from opentau.utils.hub import get_paligemma_load_kwargs, get_paligemma_source
 
 
 @dataclass
@@ -51,7 +52,10 @@ def get_tokenizer(cfg: TrainPipelineConfig) -> callable:
 
     # TODO: Add `elif` for other policy types if needed
     if issubclass(policy_class, PI0Policy) or issubclass(policy_class, PI05Policy):
-        return AutoTokenizer.from_pretrained("google/paligemma-3b-pt-224")
+        paligemma_source = get_paligemma_source()
+        return AutoTokenizer.from_pretrained(
+            paligemma_source, **get_paligemma_load_kwargs(paligemma_source)
+        )
 
     raise ValueError(f"Unsupported policy type: {cfg.policy.type}")
 

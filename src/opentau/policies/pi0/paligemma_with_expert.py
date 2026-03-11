@@ -34,6 +34,8 @@ from transformers import (
 )
 from transformers.models.auto import CONFIG_MAPPING
 
+from opentau.utils.hub import get_paligemma_load_kwargs, get_paligemma_source
+
 
 def apply_rope(x: torch.Tensor, positions: torch.Tensor, max_wavelength: int = 10_000) -> torch.Tensor:
     """Applies RoPE positions to the input tensor.
@@ -214,7 +216,10 @@ class PaliGemmaWithExpertModel(PreTrainedModel):
         self.config = config
 
         if config.load_pretrained_paligemma:
-            self.paligemma = PaliGemmaForConditionalGeneration.from_pretrained("google/paligemma-3b-pt-224")
+            paligemma_source = get_paligemma_source()
+            self.paligemma = PaliGemmaForConditionalGeneration.from_pretrained(
+                paligemma_source, **get_paligemma_load_kwargs(paligemma_source)
+            )
         else:
             self.paligemma = PaliGemmaForConditionalGeneration(config=config.paligemma_config)
         self.gemma_expert = GemmaForCausalLM(config=config.gemma_expert_config)

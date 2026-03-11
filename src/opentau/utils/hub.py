@@ -19,6 +19,7 @@ and loaded from the Hugging Face Hub, similar to ModelHubMixin but with fewer
 assumptions about the object type.
 """
 
+import os
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any, Type, TypeVar
@@ -27,6 +28,43 @@ from huggingface_hub import HfApi
 from huggingface_hub.utils import validate_hf_hub_args
 
 T = TypeVar("T", bound="HubMixin")
+
+DEFAULT_PALIGEMMA_ID = "google/paligemma-3b-pt-224"
+PALIGEMMA_ID_ENV = "OPENTAU_PALIGEMMA_ID"
+PALIGEMMA_LOCAL_ONLY_ENV = "OPENTAU_PALIGEMMA_LOCAL_FILES_ONLY"
+
+
+def get_paligemma_source() -> str:
+    """
+    Return the configured PaliGemma source.
+
+    By default this returns the public repo id. For deployment on unstable
+    networks, users can point it at a local Hugging Face snapshot directory via
+    the `OPENTAU_PALIGEMMA_ID` environment variable.
+    """
+    source = os.getenv(PALIGEMMA_ID_ENV, DEFAULT_PALIGEMMA_ID)
+    expanded = Path(source).expanduser()
+    return str(expanded) if source.startswith(("~", "/", ".")) else source
+
+
+def get_paligemma_load_kwargs(source: str | None = None) -> dict[str, Any]:
+    """
+    Return keyword arguments for loading PaliGemma from Hugging Face.
+
+    If the source points to an existing local path, or if
+    `OPENTAU_PALIGEMMA_LOCAL_FILES_ONLY=1` is set, we force local-only loading
+    to avoid runtime network calls.
+    """
+    if source is None:
+        source = get_paligemma_source()
+
+    local_only = os.getenv(PALIGEMMA_LOCAL_ONLY_ENV, "").lower() in {"1", "true", "yes"}
+    expanded = Path(source).expanduser()
+
+    kwargs: dict[str, Any] = {}
+    if local_only or expanded.exists():
+        kwargs["local_files_only"] = True
+    return kwargs
 
 
 class HubMixin:

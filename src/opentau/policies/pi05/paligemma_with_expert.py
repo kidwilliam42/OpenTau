@@ -35,6 +35,8 @@ from transformers import (
 from transformers.models.auto import CONFIG_MAPPING
 from transformers.models.gemma import modeling_gemma
 
+from opentau.utils.hub import get_paligemma_load_kwargs, get_paligemma_source
+
 
 def _preferred_dtype():
     return torch.float32 if torch.onnx.is_in_onnx_export() else torch.bfloat16
@@ -226,7 +228,10 @@ class PaliGemmaWithExpertModel(PreTrainedModel):
         self.config = config
 
         if config.load_pretrained_paligemma:
-            self.paligemma = PaliGemmaForConditionalGeneration.from_pretrained("google/paligemma-3b-pt-224")
+            paligemma_source = get_paligemma_source()
+            self.paligemma = PaliGemmaForConditionalGeneration.from_pretrained(
+                paligemma_source, **get_paligemma_load_kwargs(paligemma_source)
+            )
         else:
             self.paligemma = PaliGemmaForConditionalGeneration(config=config.paligemma_config)
         self.gemma_expert = GemmaForCausalLM(config=config.gemma_expert_config)
