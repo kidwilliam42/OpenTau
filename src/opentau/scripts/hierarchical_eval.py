@@ -129,7 +129,13 @@ def _run_single_episode(
             if agent.needs_planning:
                 logging.info(f"[episode {episode_idx}] replanning from latest observation")
 
-            action = agent.act(observation_t)
+            try:
+                action = agent.act(observation_t)
+            except StopIteration as exc:
+                logging.info(f"[episode {episode_idx}] planner ended episode: {exc}")
+                done = True
+                break
+
             action_numpy = action.to("cpu").numpy()
             if action_numpy.ndim != 2:
                 raise ValueError(f"Expected action shape [B, action_dim], got {action_numpy.shape}")

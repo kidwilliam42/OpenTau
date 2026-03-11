@@ -102,7 +102,7 @@ class HierarchicalAgent:
     def act(self, observation: dict[str, Any]) -> torch.Tensor:
         """Produce one low-level action from the current observation."""
         if self.episode_done:
-            raise RuntimeError("HierarchicalAgent is already finished.")
+            raise StopIteration("HierarchicalAgent is already finished.")
 
         self._validate_batch_size(observation)
 
@@ -110,7 +110,7 @@ class HierarchicalAgent:
             self._plan_next_subtask(observation)
 
         if self.current_subtask is None:
-            raise RuntimeError("No active subtask available for action selection.")
+            raise StopIteration("No active subtask available for action selection.")
 
         policy_observation = self._build_policy_observation(observation)
         return self.low_level_policy.select_action(policy_observation)
