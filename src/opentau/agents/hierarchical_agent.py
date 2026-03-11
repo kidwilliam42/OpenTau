@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any, Protocol
@@ -60,6 +61,8 @@ class HierarchicalAgent:
       - no explicit failure detection beyond environment success
     """
 
+    RECOVERY_REPLAN_TEXT = "The task is not yet successful. Do not return done.\nGenerate the next recovery subtask."
+
     def __init__(
         self,
         planner: NextSubtaskPlanner,
@@ -83,6 +86,7 @@ class HierarchicalAgent:
         self.low_level_policy.reset()
 
         self.history: list[ExecutionRecord] = []
+        self.planner_trace: list[dict[str, Any]] = []
         self.current_subtask: SubtaskPlan | None = None
         self.current_subtask_steps = 0
         self.needs_planning = True
@@ -168,6 +172,7 @@ class HierarchicalAgent:
                 {"instruction": item.instruction, "executed_steps": item.executed_steps}
                 for item in self.history
             ],
+            "planner_trace": self.planner_trace,
         }
 
     def _plan_next_subtask(self, observation: dict[str, Any]) -> None:
@@ -180,12 +185,11 @@ class HierarchicalAgent:
             return
 
         image_dict = self._extract_image_dict(observation)
-        planned = self.planner.plan_next(
-            task=self.task,
+        planned = self._invoke_planner(
+            planning_task=self.task,
             image_dict=image_dict,
-            history=self.history,
+            mode="primary",
         )
-        self.num_plans_made += 1
 
         if planned is None:
             # Some VLMs occasionally return "done" on the very first planning step
@@ -196,6 +200,24 @@ class HierarchicalAgent:
                     instruction=self.task,
                     max_steps=self.default_subtask_steps,
                 )
+                self.current_subtask_steps = 0
+                self.needs_planning = False
+                self.low_level_policy.reset()
+                return
+
+            recovery_task = f"{self.task}\n\n{self.RECOVERY_REPLAN_TEXT}"
+            planned = self._invoke_planner(
+                planning_task=recovery_task,
+                image_dict=image_dict,
+                mode="recovery",
+            )
+            if planned is not None:
+                instruction = planned.instruction.strip() or self.task
+                max_steps = int(planned.max_steps)
+                if max_steps <= 0:
+                    max_steps = self.default_subtask_steps
+
+                self.current_subtask = SubtaskPlan(instruction=instruction, max_steps=max_steps)
                 self.current_subtask_steps = 0
                 self.needs_planning = False
                 self.low_level_policy.reset()
@@ -218,6 +240,37 @@ class HierarchicalAgent:
 
         # New prompt means we must flush the previous low-level action queue.
         self.low_level_policy.reset()
+
+    def _invoke_planner(
+        self,
+        planning_task: str,
+        image_dict: dict[str, torch.Tensor],
+        mode: str,
+    ) -> SubtaskPlan | None:
+        """Invoke planner once and record raw/parsed outputs for debugging."""
+        planned = self.planner.plan_next(
+            task=planning_task,
+            image_dict=image_dict,
+            history=self.history,
+        )
+        self.num_plans_made += 1
+
+        planner_info = getattr(self.planner, "last_plan_info", None)
+        trace_entry = {
+            "mode": mode,
+            "planning_task": planning_task,
+            "raw_output": planner_info.get("raw_output") if isinstance(planner_info, dict) else None,
+            "parsed_output": planner_info.get("parsed_output") if isinstance(planner_info, dict) else None,
+            "selected_subtask": None
+            if planned is None
+            else {"instruction": planned.instruction, "max_steps": planned.max_steps},
+        }
+        self.planner_trace.append(trace_entry)
+
+        logging.info("[planner %s] raw_output=%s", mode, trace_entry["raw_output"])
+        logging.info("[planner %s] parsed_output=%s", mode, trace_entry["parsed_output"])
+        logging.info("[planner %s] selected_subtask=%s", mode, trace_entry["selected_subtask"])
+        return planned
 
     def _build_policy_observation(self, observation: dict[str, Any]) -> dict[str, Any]:
         """

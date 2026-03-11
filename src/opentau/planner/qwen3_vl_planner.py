@@ -57,6 +57,7 @@ class QwenHighLevelPlanner:
         self.processor, self.model = self._load_model_and_processor(model_name, self.device)
         self.input_device = torch.device(self.device)
         self.prompts_dict = self._load_prompts()
+        self.last_plan_info: dict[str, Any] | None = None
 
     def plan_next(
         self,
@@ -90,6 +91,15 @@ class QwenHighLevelPlanner:
 
         raw_text = self._generate(messages=messages, pil_images=pil_images)
         parsed = self._parse_response(raw_text)
+        self.last_plan_info = {
+            "task": task,
+            "history": [
+                {"instruction": item.instruction, "executed_steps": item.executed_steps}
+                for item in history
+            ],
+            "raw_output": raw_text,
+            "parsed_output": parsed,
+        }
 
         if parsed.get("done", False):
             return None
