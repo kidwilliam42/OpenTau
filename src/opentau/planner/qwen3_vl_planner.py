@@ -171,17 +171,32 @@ class QwenHighLevelPlanner:
         return prompts_dict
 
     def _system_prompt(self) -> str:
-        return self.prompts_dict["prompts"][self.system_prompt_key]["template"].format(
+        return self._render_template(
+            self.prompts_dict["prompts"][self.system_prompt_key]["template"],
             min_subtask_steps=self.min_subtask_steps,
             max_subtask_steps=self.max_subtask_steps,
         )
 
     def _build_user_prompt(self, task: str, history: list[ExecutionRecord]) -> str:
         history_text = self._format_history(history)
-        return self.prompts_dict["prompts"][self.user_prompt_key]["template"].format(
+        return self._render_template(
+            self.prompts_dict["prompts"][self.user_prompt_key]["template"],
             task=task,
             executed_subtasks=history_text,
         )
+
+    def _render_template(self, template: str, **kwargs: Any) -> str:
+        """
+        Render known placeholders without interpreting literal JSON braces.
+
+        Prompt templates include JSON examples such as {"done": true}. Using
+        str.format() would treat those braces as placeholders, so we only
+        replace the explicit variables we own.
+        """
+        rendered = template
+        for key, value in kwargs.items():
+            rendered = rendered.replace(f"{{{key}}}", str(value))
+        return rendered
 
     def _format_history(self, history: list[ExecutionRecord]) -> str:
         if not history:
@@ -353,5 +368,5 @@ class QwenHighLevelPlanner:
 
         np_image = image.numpy()
         if np_image.shape[2] == 1:
-            return Image.fromarray(np_image[:, :, 0], mode="L")
-        return Image.fromarray(np_image, mode="RGB")
+            return Image.fromarray(np_image[:, :, 0])
+        return Image.fromarray(np_image)
