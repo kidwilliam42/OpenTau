@@ -70,48 +70,85 @@ We provide fully functioning $\pi_{0.5}$ checkpoints trained with high success r
 
 ## 与上游 OpenTau 官方代码的主要差异
 
-本仓库在 [OpenTau 官方仓库](https://github.com/TensorAuto/OpenTau) 基础上进行了以下扩展：
+本仓库在 [OpenTau 官方仓库](https://github.com/TensorAuto/OpenTau) 基础上做了三项主要改动。下面用通俗的语言解释每项改动做了什么、为什么要做。
 
-### 1. 新增：基于 Qwen3-VL 的层级任务规划评估流程
+---
 
-新增了一套完整的在线层级评估管线，使用视觉语言模型（Qwen3-VL）作为高层规划器，将长时域任务分解为可执行的子任务，再交由低层 VLA 策略（如 π₀.₅）执行。
+### 改动一：给机器人加了一个"大脑"——层级任务规划
 
-| 组件 | 文件 | 说明 |
+**一句话概括：** 让一个会"看图说话"的 AI（Qwen3-VL）充当指挥官，把复杂任务拆成一步步的小指令，再交给机器人手臂去执行。
+
+**通俗解释：**
+
+想象你让机器人完成"把两个摩卡壶都放到炉子上"这个任务。官方的 OpenTau 只有一个"手"——低层策略（π₀.₅），它只知道根据当前看到的画面做出下一个动作，但不会主动拆解任务。这就好比让一个工人干活，但没有工头告诉他先做什么、后做什么。
+
+我们加的"大脑"就是这个工头。它的工作流程是：
+1. **看一眼当前场景**（通过摄像头图像）
+2. **想一想下一步该做什么**（比如"先把右边的摩卡壶对准炉子"）
+3. **把指令发给"手"去执行**（低层策略执行 10-30 步动作）
+4. **执行完了再看一眼**，决定下一个子任务
+5. **循环往复**，直到任务完成或步数用完
+
+**涉及的文件：**
+
+| 文件 | 作用 |
+|---|---|
+| `src/opentau/agents/hierarchical_agent.py` | "大脑"和"手"之间的协调逻辑 |
+| `src/opentau/planner/qwen3_vl_planner.py` | "大脑"本身——调用 Qwen3-VL 模型进行规划 |
+| `src/opentau/planner/qwen_prompts.yaml` | 给"大脑"的指令模板（提示词），定义了它该怎么思考 |
+| `src/opentau/scripts/hierarchical_eval.py` | 运行评估的主脚本 |
+| `configs/examples/pi05_hierarchical_eval_config.json` | 评估用的配置参数 |
+| `src/opentau/configs/default.py` | 可调节的参数定义（每步多少动作、最多规划几次等） |
+
+我们还准备了三种不同风格的提示词，适用于不同场景：
+- **通用型**：适合大多数任务
+- **简短操作型**：指令更简洁，适合简单操作任务
+- **保守操作型**：更谨慎，会先对准再抓取，适合精细操作
+
+---
+
+### 改动二：把模型搬到本地——支持断网运行
+
+**一句话概括：** 官方代码运行时会从 HuggingFace 网站下载模型，但我们的服务器没有外网，所以把所有模型提前下载好放在本地，并修改代码直接读取本地文件。
+
+**通俗解释：**
+
+官方代码里写的是"去 HuggingFace 网站下载 `google/paligemma-3b-pt-224` 这个模型"，就像写了个网址让程序自己去下。但我们的服务器连不上外网，所以：
+1. 先在能上网的电脑上把模型下载好
+2. 拷贝到服务器的 `/home/yjc/models/` 目录下
+3. 把代码里所有"网址"改成"本地文件路径"
+
+改动涉及三个模型：
+
+| 模型 | 用途 | 本地路径 |
 |---|---|---|
-| 层级智能体 | `src/opentau/agents/hierarchical_agent.py` | 滚动式单子任务规划智能体，支持恢复性重规划 |
-| Qwen3-VL 规划器 | `src/opentau/planner/qwen3_vl_planner.py` | 基于 Qwen3-VL-4B-Instruct 的高层规划器，利用视觉理解进行场景分析 |
-| 提示词模板 | `src/opentau/planner/qwen_prompts.yaml` | 外置的 YAML 提示词库，包含 3 种风格的提示词 |
-| 评估脚本 | `src/opentau/scripts/hierarchical_eval.py` | 层级评估入口脚本，支持在 LIBERO 环境中运行 |
-| 配置文件 | `configs/examples/pi05_hierarchical_eval_config.json` | LIBERO 层级评估的示例配置 |
-| 配置数据类 | `src/opentau/configs/default.py` | `HierarchicalConfig` 数据类，包含可调节的规划参数 |
+| PaliGemma | 机器人的"眼睛"，负责理解图像 | `/home/yjc/models/paligemma-3b-pt-224` |
+| Qwen3-VL | 机器人的"大脑"，负责规划任务 | `/home/yjc/models/Qwen3-VL-4B-Instruct` |
+| Fast tokenizer | 把动作转换成模型能理解的格式 | `/home/yjc/models/fast` |
 
-**核心特性：**
-- 三种提示词风格：通用型（general）、简短操作型（manipulation-short）、保守操作型（manipulation-conservative）
-- 可配置的子任务步数预算、重规划次数上限、历史记录窗口大小
-- 主规划失败时自动触发恢复性重规划（recovery replanning）
-- 每个 episode 生成 JSON 摘要文件，包含完整的智能体状态信息，便于调试
+另外还加了一个便利功能：如果将来想换模型路径，不用改代码，只需设置环境变量 `OPENTAU_PALIGEMMA_ID` 即可。
 
-详细使用说明和参数调优建议见 [层级评估指南](docs/source/tutorials/hierarchical_evaluation.rst)。
+---
 
-### 2. 修改：离线本地模型加载
+### 改动三：让"大脑"更聪明——提示词优化
 
-所有 HuggingFace 远程模型引用已替换为本地路径（`/home/yjc/models/`），支持在无外网环境下部署和运行：
+**一句话概括：** 修改了给 AI 规划器的指令，解决了它"偷懒"的问题——以前做了一半就说"我做完了"，现在会认真检查是否真的全做完了。
 
-| 模型 | 原始 HuggingFace ID | 本地路径 |
-|---|---|---|
-| PaliGemma VLM 骨干网络 | `google/paligemma-3b-pt-224` | `/home/yjc/models/paligemma-3b-pt-224` |
-| Qwen3-VL 高层规划器 | `Qwen/Qwen3-VL-4B-Instruct` | `/home/yjc/models/Qwen3-VL-4B-Instruct` |
-| Fast 离散动作 tokenizer | `physical-intelligence/fast` | `/home/yjc/models/fast` |
+**通俗解释：**
 
-此外，`src/opentau/utils/hub.py` 中新增了 `get_paligemma_source()` 函数，支持通过环境变量 `OPENTAU_PALIGEMMA_ID` 动态覆盖 PaliGemma 模型路径。
+改之前的问题：任务是"把两个摩卡壶都放到炉子上"，规划器放了一个之后就说"任务完成了"。这就好比老师让你做 10 道题，你做了 1 道就交卷了。
 
-### 3. 优化：规划器提示词改进
+原因是提示词里只写了"如果任务完成了就返回 done"，但没有强调怎么才算"完成"。
 
-`qwen_prompts.yaml` 中所有三种提示词风格均进行了优化：
-- **更严格的完成判断**：规划器必须通过图像视觉确认任务的所有部分都已完成，才能返回 `{"done": true}`
-- **多物体感知**：当任务提及"both"或"all"时，明确要求逐一检查每个目标物体的状态
-- **失败重试逻辑**：如果之前的子任务可能未成功执行，规划器会重试而不是跳过
-- **视觉验证提醒**：用户提示词中增加了"不要因为子任务已经尝试过就假定任务完成"的明确要求
+改进后的提示词增加了四条规则：
+1. **看图确认**：必须看着摄像头图像亲眼确认所有东西都到位了，才能说"完成"
+2. **逐个检查**：如果任务说"两个都要放好"，就必须确认两个都放好了，不能只放一个就算完
+3. **失败重试**：如果上一步可能没做成功（比如没抓住），就重试，而不是跳过
+4. **不要自欺欺人**：不能因为"尝试过了"就当作"做到了"，必须用眼睛（图像）来验证
+
+这个改动效果明显：
+- 改之前：平均只执行 40 步就放弃，成功率 0%
+- 改之后：平均执行 456 步持续尝试，成功率提升到 50%
 
 ## Acknowledgements
 
