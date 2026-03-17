@@ -122,9 +122,11 @@ We provide fully functioning $\pi_{0.5}$ checkpoints trained with high success r
 
 | 模型 | 用途 | 本地路径 |
 |---|---|---|
-| PaliGemma | 机器人的"眼睛"，负责理解图像 | `/home/yjc/models/paligemma-3b-pt-224` |
-| Qwen3-VL | 机器人的"大脑"，负责规划任务 | `/home/yjc/models/Qwen3-VL-4B-Instruct` |
-| Fast tokenizer | 把动作转换成模型能理解的格式 | `/home/yjc/models/fast` |
+| PaliGemma | 机器人的"眼睛"（VLM 骨干网络），负责理解图像 | `/home/yjc/models/paligemma-3b-pt-224` |
+| Qwen3-VL | 机器人的"大脑"（高层规划器），负责规划任务 | `/home/yjc/models/Qwen3-VL-4B-Instruct` |
+| Fast tokenizer | 离散动作 tokenizer，仅在模型初始化时加载以构建网络结构，**推理时不参与动作生成** | `/home/yjc/models/fast` |
+
+> **注意：** π₀.₅ 有两条动作输出路径——基于扩散模型（Flow Matching）的连续动作和基于 Fast tokenizer 的离散动作。**推理时只使用扩散模型生成动作**，Fast tokenizer 仅在训练时提供辅助监督信号（CE loss）。初始化时仍需加载 Fast tokenizer，因为需要其 `vocab_size` 来构建与 checkpoint 权重匹配的网络结构。如果只需要纯扩散模型（不含离散动作分支），应使用 π₀ 而非 π₀.₅。
 
 另外还加了一个便利功能：如果将来想换模型路径，不用改代码，只需设置环境变量 `OPENTAU_PALIGEMMA_ID` 即可。
 
