@@ -68,6 +68,51 @@ We provide fully functioning $\pi_{0.5}$ checkpoints trained with high success r
 | [TensorAuto/pi05_base][5]     | A $\pi_{0.5}$ model checkpoint converted from the official openpi checkpoint, with language embeddings added. | N/A                                                                |
 | More coming soon...           |                                                                                                               |                                                                    |
 
+## Differences from Upstream OpenTau
+
+This fork extends the [official OpenTau repository](https://github.com/TensorAuto/OpenTau) with the following changes:
+
+### 1. Hierarchical Evaluation with Qwen3-VL Planner
+
+Added a complete online hierarchical evaluation pipeline that decomposes long-horizon tasks into subtasks using a vision-language model as a high-level planner.
+
+| Component | File | Description |
+|---|---|---|
+| Hierarchical Agent | `src/opentau/agents/hierarchical_agent.py` | Rolling single-subtask planning agent with recovery replanning |
+| Qwen3-VL Planner | `src/opentau/planner/qwen3_vl_planner.py` | High-level planner using Qwen3-VL-4B-Instruct for scene understanding |
+| Prompt Templates | `src/opentau/planner/qwen_prompts.yaml` | Externalized YAML prompt library with 3 prompt styles |
+| Eval Script | `src/opentau/scripts/hierarchical_eval.py` | Entry point for hierarchical evaluation on LIBERO |
+| Config | `configs/examples/pi05_hierarchical_eval_config.json` | Example configuration for LIBERO hierarchical eval |
+| Config Dataclass | `src/opentau/configs/default.py` | `HierarchicalConfig` with tunable planning parameters |
+
+**Key features:**
+- Three prompt styles: general, manipulation-short, and manipulation-conservative
+- Configurable subtask step budgets, replanning limits, and history window
+- Recovery replanning when primary planning returns empty results
+- Per-episode JSON summaries with full agent state for debugging
+
+See [Hierarchical Evaluation Guide](docs/source/tutorials/hierarchical_evaluation.rst) for detailed usage and tuning recommendations.
+
+### 2. Offline / Local Model Loading
+
+All HuggingFace model references have been replaced with local paths under `/home/yjc/models/` to support air-gapped (no internet) deployment:
+
+| Model | Original ID | Local Path |
+|---|---|---|
+| PaliGemma VLM backbone | `google/paligemma-3b-pt-224` | `/home/yjc/models/paligemma-3b-pt-224` |
+| Qwen3-VL planner | `Qwen/Qwen3-VL-4B-Instruct` | `/home/yjc/models/Qwen3-VL-4B-Instruct` |
+| Fast tokenizer | `physical-intelligence/fast` | `/home/yjc/models/fast` |
+
+Additionally, `src/opentau/utils/hub.py` provides `get_paligemma_source()` which supports overriding the PaliGemma path via the `OPENTAU_PALIGEMMA_ID` environment variable.
+
+### 3. Improved Planner Prompts
+
+All three prompt styles in `qwen_prompts.yaml` have been updated with:
+- **Stricter done-check**: planner must visually confirm ALL parts of the task are completed before returning `{"done": true}`
+- **Multi-object awareness**: explicit rule to verify EACH object when the task mentions "both" or "all"
+- **Retry logic**: if a previous subtask may not have succeeded, retry instead of skipping
+- **Visual verification reminder**: user prompts now instruct the planner not to assume completion just because subtasks were attempted
+
 ## Acknowledgements
 
 This project builds on the $\pi$ series of [papers][3] and many other open-source efforts—especially [LeRobot][4]—for re-implementing the $\pi$ models and helping standardize training infrastructure. OpenTau extends these foundations to provide a more accessible, comprehensive toolchain for training vision-language-action agents.
