@@ -29,7 +29,9 @@ prompts:
       - The instruction must be short, imperative, and directly executable.
       - Do not explain your reasoning.
       - Do not output multiple subtasks.
-      - If the task is already completed, return exactly {"done": true}.
+      - ONLY return {"done": true} if you can visually confirm in the images that ALL parts of the task are fully completed.
+      - If the task mentions multiple objects (e.g. "both", "all"), verify EACH object is in its target position before marking done.
+      - If a previous subtask was attempted but may not have succeeded, retry it.
       - max_steps should usually be between {min_subtask_steps} and {max_subtask_steps}.
       - Do not use markdown fences.
       - Return valid JSON only.
@@ -45,8 +47,9 @@ prompts:
       Executed subtasks:
       {executed_subtasks}
 
-      Look at the current scene and generate the next subtask.
-      Return JSON only.
+      IMPORTANT: Look carefully at the current images. Do NOT assume the task is done just because subtasks were attempted. Verify visually that the goal state is achieved.
+
+      Generate the next subtask. Return JSON only.
 
   qwen_manipulation_short_system:
     id: "QWEN-SYS-002"
@@ -75,7 +78,9 @@ prompts:
       - Focus on manipulation actions such as approach, align, grasp, move, place, release, lift.
       - The instruction must describe only the immediate next phase, not the whole plan.
       - Avoid explanations, conditions, or multi-step instructions.
-      - If the task is already complete, return exactly {"done": true}.
+      - ONLY return {"done": true} if you can visually confirm in the images that ALL parts of the task are fully completed.
+      - If the task mentions multiple objects (e.g. "both", "all"), verify EACH object is in its target position before marking done.
+      - If a previous subtask was attempted but may not have succeeded, retry it.
       - max_steps should usually be between {min_subtask_steps} and {max_subtask_steps}.
       - Do not use markdown fences.
       - Return valid JSON only.
@@ -90,6 +95,8 @@ prompts:
 
       Completed subtasks:
       {executed_subtasks}
+
+      IMPORTANT: Look carefully at the current images. Do NOT assume the task is done just because subtasks were attempted. Verify visually that the goal state is achieved.
 
       Using the current images, output the next short manipulation subtask only.
       Return JSON only.
@@ -123,7 +130,9 @@ prompts:
       - If the object is not well positioned, favor alignment or approach instead of aggressive manipulation.
       - The instruction must describe only the immediate next phase.
       - Do not explain your reasoning.
-      - If the task is already complete, return exactly {"done": true}.
+      - ONLY return {"done": true} if you can visually confirm in the images that ALL parts of the task are fully completed.
+      - If the task mentions multiple objects (e.g. "both", "all"), verify EACH object is in its target position before marking done.
+      - If a previous subtask was attempted but may not have succeeded, retry it.
       - max_steps should usually be between {min_subtask_steps} and {max_subtask_steps}.
       - Do not use markdown fences.
       - Return valid JSON only.
@@ -138,6 +147,8 @@ prompts:
 
       Completed subtasks:
       {executed_subtasks}
+
+      IMPORTANT: Look carefully at the current images. Do NOT assume the task is done just because subtasks were attempted. Verify visually that the goal state is achieved.
 
       Using the current images, output the next conservative manipulation subtask only.
       Prefer alignment and approach before grasping or releasing.

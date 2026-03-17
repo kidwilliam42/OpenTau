@@ -37,7 +37,7 @@ from transformers import AutoTokenizer
 from opentau.configs import parser
 from opentau.utils.utils import init_logging
 
-PI05_TOKENIZER_ID = "google/paligemma-3b-pt-224"
+PI05_TOKENIZER_ID = "/home/yjc/models/paligemma-3b-pt-224"
 
 
 @dataclass

@@ -271,7 +271,7 @@ class PI05Policy(PreTrainedPolicy):
         )
 
         self.discrete_action_processor = AutoProcessor.from_pretrained(
-            "physical-intelligence/fast", trust_remote_code=True
+            "/home/yjc/models/fast", trust_remote_code=True
         )
         # Get vocab size from processor
         discrete_action_vocab_size = getattr(self.discrete_action_processor, "vocab_size", None)

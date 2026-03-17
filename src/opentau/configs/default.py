@@ -315,7 +315,7 @@ class HierarchicalConfig:
         user_prompt_key: Key of the user prompt template inside the YAML file.
     """
 
-    model_name: str = "Qwen/Qwen3-VL-4B-Instruct"
+    model_name: str = "/home/yjc/models/Qwen3-VL-4B-Instruct"
     subtask_steps: int = 15
     min_subtask_steps: int = 5
     max_subtask_steps: int = 30

@@ -32,7 +32,7 @@ class QwenHighLevelPlanner:
 
     def __init__(
         self,
-        model_name: str = "Qwen/Qwen3-VL-4B-Instruct",
+        model_name: str = "/home/yjc/models/Qwen3-VL-4B-Instruct",
         device: str | torch.device = "cuda",
         max_new_tokens: int = 128,
         default_subtask_steps: int = 15,

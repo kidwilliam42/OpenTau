@@ -29,7 +29,7 @@ from huggingface_hub.utils import validate_hf_hub_args
 
 T = TypeVar("T", bound="HubMixin")
 
-DEFAULT_PALIGEMMA_ID = "google/paligemma-3b-pt-224"
+DEFAULT_PALIGEMMA_ID = "/home/yjc/models/paligemma-3b-pt-224"
 PALIGEMMA_ID_ENV = "OPENTAU_PALIGEMMA_ID"
 PALIGEMMA_LOCAL_ONLY_ENV = "OPENTAU_PALIGEMMA_LOCAL_FILES_ONLY"
 

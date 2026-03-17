@@ -126,7 +126,7 @@
         "camera_name_mapping": null
     },
     "hierarchical": {
-        "model_name": "Qwen/Qwen3-VL-4B-Instruct",
+        "model_name": "/home/yjc/models/Qwen3-VL-4B-Instruct",
         "subtask_steps": 15,
         "min_subtask_steps": 5,
         "max_subtask_steps": 30,
