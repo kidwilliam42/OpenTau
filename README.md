@@ -68,50 +68,50 @@ We provide fully functioning $\pi_{0.5}$ checkpoints trained with high success r
 | [TensorAuto/pi05_base][5]     | A $\pi_{0.5}$ model checkpoint converted from the official openpi checkpoint, with language embeddings added. | N/A                                                                |
 | More coming soon...           |                                                                                                               |                                                                    |
 
-## Differences from Upstream OpenTau
+## 与上游 OpenTau 官方代码的主要差异
 
-This fork extends the [official OpenTau repository](https://github.com/TensorAuto/OpenTau) with the following changes:
+本仓库在 [OpenTau 官方仓库](https://github.com/TensorAuto/OpenTau) 基础上进行了以下扩展：
 
-### 1. Hierarchical Evaluation with Qwen3-VL Planner
+### 1. 新增：基于 Qwen3-VL 的层级任务规划评估流程
 
-Added a complete online hierarchical evaluation pipeline that decomposes long-horizon tasks into subtasks using a vision-language model as a high-level planner.
+新增了一套完整的在线层级评估管线，使用视觉语言模型（Qwen3-VL）作为高层规划器，将长时域任务分解为可执行的子任务，再交由低层 VLA 策略（如 π₀.₅）执行。
 
-| Component | File | Description |
+| 组件 | 文件 | 说明 |
 |---|---|---|
-| Hierarchical Agent | `src/opentau/agents/hierarchical_agent.py` | Rolling single-subtask planning agent with recovery replanning |
-| Qwen3-VL Planner | `src/opentau/planner/qwen3_vl_planner.py` | High-level planner using Qwen3-VL-4B-Instruct for scene understanding |
-| Prompt Templates | `src/opentau/planner/qwen_prompts.yaml` | Externalized YAML prompt library with 3 prompt styles |
-| Eval Script | `src/opentau/scripts/hierarchical_eval.py` | Entry point for hierarchical evaluation on LIBERO |
-| Config | `configs/examples/pi05_hierarchical_eval_config.json` | Example configuration for LIBERO hierarchical eval |
-| Config Dataclass | `src/opentau/configs/default.py` | `HierarchicalConfig` with tunable planning parameters |
+| 层级智能体 | `src/opentau/agents/hierarchical_agent.py` | 滚动式单子任务规划智能体，支持恢复性重规划 |
+| Qwen3-VL 规划器 | `src/opentau/planner/qwen3_vl_planner.py` | 基于 Qwen3-VL-4B-Instruct 的高层规划器，利用视觉理解进行场景分析 |
+| 提示词模板 | `src/opentau/planner/qwen_prompts.yaml` | 外置的 YAML 提示词库，包含 3 种风格的提示词 |
+| 评估脚本 | `src/opentau/scripts/hierarchical_eval.py` | 层级评估入口脚本，支持在 LIBERO 环境中运行 |
+| 配置文件 | `configs/examples/pi05_hierarchical_eval_config.json` | LIBERO 层级评估的示例配置 |
+| 配置数据类 | `src/opentau/configs/default.py` | `HierarchicalConfig` 数据类，包含可调节的规划参数 |
 
-**Key features:**
-- Three prompt styles: general, manipulation-short, and manipulation-conservative
-- Configurable subtask step budgets, replanning limits, and history window
-- Recovery replanning when primary planning returns empty results
-- Per-episode JSON summaries with full agent state for debugging
+**核心特性：**
+- 三种提示词风格：通用型（general）、简短操作型（manipulation-short）、保守操作型（manipulation-conservative）
+- 可配置的子任务步数预算、重规划次数上限、历史记录窗口大小
+- 主规划失败时自动触发恢复性重规划（recovery replanning）
+- 每个 episode 生成 JSON 摘要文件，包含完整的智能体状态信息，便于调试
 
-See [Hierarchical Evaluation Guide](docs/source/tutorials/hierarchical_evaluation.rst) for detailed usage and tuning recommendations.
+详细使用说明和参数调优建议见 [层级评估指南](docs/source/tutorials/hierarchical_evaluation.rst)。
 
-### 2. Offline / Local Model Loading
+### 2. 修改：离线本地模型加载
 
-All HuggingFace model references have been replaced with local paths under `/home/yjc/models/` to support air-gapped (no internet) deployment:
+所有 HuggingFace 远程模型引用已替换为本地路径（`/home/yjc/models/`），支持在无外网环境下部署和运行：
 
-| Model | Original ID | Local Path |
+| 模型 | 原始 HuggingFace ID | 本地路径 |
 |---|---|---|
-| PaliGemma VLM backbone | `google/paligemma-3b-pt-224` | `/home/yjc/models/paligemma-3b-pt-224` |
-| Qwen3-VL planner | `Qwen/Qwen3-VL-4B-Instruct` | `/home/yjc/models/Qwen3-VL-4B-Instruct` |
-| Fast tokenizer | `physical-intelligence/fast` | `/home/yjc/models/fast` |
+| PaliGemma VLM 骨干网络 | `google/paligemma-3b-pt-224` | `/home/yjc/models/paligemma-3b-pt-224` |
+| Qwen3-VL 高层规划器 | `Qwen/Qwen3-VL-4B-Instruct` | `/home/yjc/models/Qwen3-VL-4B-Instruct` |
+| Fast 离散动作 tokenizer | `physical-intelligence/fast` | `/home/yjc/models/fast` |
 
-Additionally, `src/opentau/utils/hub.py` provides `get_paligemma_source()` which supports overriding the PaliGemma path via the `OPENTAU_PALIGEMMA_ID` environment variable.
+此外，`src/opentau/utils/hub.py` 中新增了 `get_paligemma_source()` 函数，支持通过环境变量 `OPENTAU_PALIGEMMA_ID` 动态覆盖 PaliGemma 模型路径。
 
-### 3. Improved Planner Prompts
+### 3. 优化：规划器提示词改进
 
-All three prompt styles in `qwen_prompts.yaml` have been updated with:
-- **Stricter done-check**: planner must visually confirm ALL parts of the task are completed before returning `{"done": true}`
-- **Multi-object awareness**: explicit rule to verify EACH object when the task mentions "both" or "all"
-- **Retry logic**: if a previous subtask may not have succeeded, retry instead of skipping
-- **Visual verification reminder**: user prompts now instruct the planner not to assume completion just because subtasks were attempted
+`qwen_prompts.yaml` 中所有三种提示词风格均进行了优化：
+- **更严格的完成判断**：规划器必须通过图像视觉确认任务的所有部分都已完成，才能返回 `{"done": true}`
+- **多物体感知**：当任务提及"both"或"all"时，明确要求逐一检查每个目标物体的状态
+- **失败重试逻辑**：如果之前的子任务可能未成功执行，规划器会重试而不是跳过
+- **视觉验证提醒**：用户提示词中增加了"不要因为子任务已经尝试过就假定任务完成"的明确要求
 
 ## Acknowledgements
 
