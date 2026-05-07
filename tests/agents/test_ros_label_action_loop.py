@@ -37,29 +37,33 @@ class FakePublisher:
         self.messages.append(msg)
 
 
-class FakeNode:
+class FakeRospy:
     def __init__(self):
         self.subscriptions = []
         self.publishers = {}
 
-    def create_subscription(self, message_type, topic, callback, qos_profile):
+    def subscriber(self, topic, message_type, callback, queue_size):
         subscription = {
             "message_type": message_type,
             "topic": topic,
             "callback": callback,
-            "qos_profile": qos_profile,
+            "queue_size": queue_size,
         }
         self.subscriptions.append(subscription)
         return subscription
 
-    def create_publisher(self, message_type, topic, qos_profile):
+    def publisher(self, topic, message_type, queue_size):
         publisher = FakePublisher()
         self.publishers[topic] = {
             "message_type": message_type,
             "publisher": publisher,
-            "qos_profile": qos_profile,
+            "queue_size": queue_size,
         }
         return publisher
+
+
+FakeRospy.Subscriber = FakeRospy.subscriber
+FakeRospy.Publisher = FakeRospy.publisher
 
 
 def _jpeg_bytes() -> bytes:
@@ -91,54 +95,54 @@ def test_image_msg_to_pil_decodes_bgr8_image():
 
 
 def test_ros_image_topic_camera_returns_latest_decoded_image():
-    node = FakeNode()
+    ros_api = FakeRospy()
     camera = RosImageTopicCamera(
-        node=node,
         topic="/camera/image_compressed",
         message_type=FakeCompressedImage,
+        ros_api=ros_api,
     )
 
-    node.subscriptions[0]["callback"](FakeCompressedImage(_jpeg_bytes()))
+    ros_api.subscriptions[0]["callback"](FakeCompressedImage(_jpeg_bytes()))
     image = camera.capture()
 
     assert image.mode == "RGB"
     assert image.size == (2, 1)
-    assert node.subscriptions[0]["topic"] == "/camera/image_compressed"
+    assert ros_api.subscriptions[0]["topic"] == "/camera/image_compressed"
 
 
 def test_ros_instruction_executor_publishes_plain_instruction_and_stop():
-    node = FakeNode()
+    ros_api = FakeRospy()
     executor = RosInstructionExecutor(
-        node=node,
         instruction_topic="/robot/pi05_instruction",
         stop_topic="/robot/pi05_stop",
         string_msg_type=FakeString,
+        ros_api=ros_api,
     )
 
     executor.execute("Navigate to the target slot.")
     executor.stop()
 
-    instruction_pub = node.publishers["/robot/pi05_instruction"]["publisher"]
-    stop_pub = node.publishers["/robot/pi05_stop"]["publisher"]
+    instruction_pub = ros_api.publishers["/robot/pi05_instruction"]["publisher"]
+    stop_pub = ros_api.publishers["/robot/pi05_stop"]["publisher"]
     assert instruction_pub.messages[0].data == "Navigate to the target slot."
     assert stop_pub.messages[0].data == "STOP"
 
 
 def test_ros_instruction_executor_can_publish_json_payloads():
-    node = FakeNode()
+    ros_api = FakeRospy()
     executor = RosInstructionExecutor(
-        node=node,
         instruction_topic="/robot/pi05_instruction",
         stop_topic="/robot/pi05_stop",
         publish_json=True,
         string_msg_type=FakeString,
+        ros_api=ros_api,
     )
 
     executor.execute("Place the held object into the target slot.")
     executor.stop()
 
-    instruction_pub = node.publishers["/robot/pi05_instruction"]["publisher"]
-    stop_pub = node.publishers["/robot/pi05_stop"]["publisher"]
+    instruction_pub = ros_api.publishers["/robot/pi05_instruction"]["publisher"]
+    stop_pub = ros_api.publishers["/robot/pi05_stop"]["publisher"]
     assert json.loads(instruction_pub.messages[0].data) == {
         "command": "execute",
         "instruction": "Place the held object into the target slot.",

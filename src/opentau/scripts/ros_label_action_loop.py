@@ -9,7 +9,7 @@ from opentau.planner import DEFAULT_QWEN3_VL_MODEL, Qwen3VLActionSelector
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Run the VLM label action loop over ROS2 topics.")
+    parser = argparse.ArgumentParser(description="Run the VLM label action loop over ROS1 topics.")
     parser.add_argument("--task", required=True, help="Task text. Include the target slot in this text.")
     parser.add_argument("--model-name", default=DEFAULT_QWEN3_VL_MODEL, help="Qwen3-VL model name.")
     parser.add_argument("--device", default="cuda", help="Device for Qwen3-VL inference, e.g. cuda or cpu.")
