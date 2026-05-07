@@ -72,8 +72,7 @@ class FakeQwenModel:
 def test_build_select_action_prompt_contains_fixed_candidates_and_task_context():
     prompt = build_select_action_prompt(
         current_label="B",
-        task="Place the red cube into the target slot.",
-        slot="S2",
+        task="Place the red cube into target slot S2.",
     )
 
     assert "A = PICK" in prompt
@@ -82,8 +81,8 @@ def test_build_select_action_prompt_contains_fixed_candidates_and_task_context()
     assert "D = NAV_BIN" in prompt
     assert "E = DONE" in prompt
     assert "Current action: B" in prompt
-    assert "Task: Place the red cube into the target slot." in prompt
-    assert "Target slot: S2" in prompt
+    assert "Task: Place the red cube into target slot S2." in prompt
+    assert "Target slot:" not in prompt
     assert "Choose exactly one of A, B, C, D, E." in prompt
 
 
@@ -106,7 +105,6 @@ def test_vlm_select_action_by_logits_uses_fixed_candidate_argmax():
         task="Put the object in slot S2.",
         vlm=vlm,
         token_id_fn=token_ids.__getitem__,
-        slot="S2",
     )
 
     assert selected == "B"
@@ -132,7 +130,6 @@ def test_vlm_select_action_by_logits_uses_last_token_for_sequence_logits():
         task="Put the object in slot S2.",
         vlm=vlm,
         token_id_fn=token_ids.__getitem__,
-        slot="S2",
     )
 
     assert selected == "E"
@@ -142,7 +139,7 @@ def test_vlm_action_selector_wrapper_delegates_to_logits_selector():
     token_ids = {label: idx for idx, label in enumerate(CANDIDATES)}
     selector = VLMActionSelector(vlm=FakeVLM(torch.tensor([0.0, 0.0, 2.0, 0.0, 0.0])), token_id_fn=token_ids.__getitem__)
 
-    assert selector.select(image="frame", current_label="B", task="Place object.", slot="S2") == "C"
+    assert selector.select(image="frame", current_label="B", task="Place object into slot S2.") == "C"
 
 
 def test_token_id_from_tokenizer_requires_single_token_labels():
@@ -168,7 +165,6 @@ def test_qwen3_vl_action_selector_scores_qwen_forward_logits():
         image="pil-image",
         current_label="B",
         task="Put the object into slot S2.",
-        slot="S2",
     )
 
     assert selected == "D"
@@ -180,4 +176,5 @@ def test_qwen3_vl_action_selector_scores_qwen_forward_logits():
     assert user_content[0] == {"type": "image", "image": "pil-image"}
     assert user_content[1]["type"] == "text"
     assert "Current action: B" in user_content[1]["text"]
-    assert "Target slot: S2" in user_content[1]["text"]
+    assert "Task: Put the object into slot S2." in user_content[1]["text"]
+    assert "Target slot:" not in user_content[1]["text"]

@@ -16,13 +16,9 @@ ACTIVE_CANDIDATES: tuple[ActiveActionLabel, ...] = ("A", "B", "C", "D")
 def build_select_action_prompt(
     current_label: ActiveActionLabel | str | None,
     task: str,
-    slot: str | int | None = None,
 ) -> str:
     """Build the constrained prompt used before fixed-token logits scoring."""
     normalized_current_label = normalize_current_label(current_label)
-    task_lines = [f"Task: {task}"]
-    if slot is not None:
-        task_lines.append(f"Target slot: {slot}")
 
     return (
         "Select the robot action that should be executed now.\n\n"
@@ -33,7 +29,7 @@ def build_select_action_prompt(
         "D = NAV_BIN: navigate to the material bin.\n"
         "E = DONE: the task is complete.\n\n"
         f"Current action: {normalized_current_label}\n"
-        f"{chr(10).join(task_lines)}\n\n"
+        f"Task: {task}\n\n"
         "Look at the image and choose the best action the robot should execute now.\n\n"
         "Rules:\n"
         "- Output A if the robot should pick up the target object from the material bin.\n"
@@ -54,7 +50,6 @@ def vlm_select_action_by_logits(
     task: str,
     vlm: Any,
     token_id_fn: Callable[[ActionLabel], int],
-    slot: str | int | None = None,
 ) -> ActionLabel:
     """
     Select one of A/B/C/D/E by comparing the VLM next-token logits.
@@ -63,7 +58,7 @@ def vlm_select_action_by_logits(
     ``forward(image=image, prompt=prompt)`` and return either logits directly,
     an object with a ``logits`` attribute, or a mapping with a ``logits`` key.
     """
-    prompt = build_select_action_prompt(current_label=current_label, task=task, slot=slot)
+    prompt = build_select_action_prompt(current_label=current_label, task=task)
     forward_output = vlm.forward(image=image, prompt=prompt)
     logits = _extract_next_token_logits(forward_output)
 
@@ -87,7 +82,6 @@ class VLMActionSelector:
         image: Any,
         current_label: ActiveActionLabel | str | None,
         task: str,
-        slot: str | int | None = None,
     ) -> ActionLabel:
         return vlm_select_action_by_logits(
             image=image,
@@ -95,7 +89,6 @@ class VLMActionSelector:
             task=task,
             vlm=self.vlm,
             token_id_fn=self.token_id_fn,
-            slot=slot,
         )
 
 
@@ -130,7 +123,6 @@ class Qwen3VLActionSelector:
         image: Any,
         current_label: ActiveActionLabel | str | None,
         task: str,
-        slot: str | int | None = None,
     ) -> ActionLabel:
         return vlm_select_action_by_logits(
             image=image,
@@ -138,7 +130,6 @@ class Qwen3VLActionSelector:
             task=task,
             vlm=self,
             token_id_fn=self.token_ids.__getitem__,
-            slot=slot,
         )
 
     def forward(self, image: Any, prompt: str) -> Any:

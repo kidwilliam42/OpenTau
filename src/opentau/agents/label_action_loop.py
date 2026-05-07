@@ -36,7 +36,6 @@ class LabelActionSelector(Protocol):
         image: Any,
         current_label: ActiveActionLabel | None,
         task: str,
-        slot: str | int,
     ) -> ActionLabel:
         """Return the selected action label from fixed candidates A/B/C/D/E."""
         ...
@@ -92,16 +91,16 @@ def decide_label_transition(
     return LabelDecision.SWITCH
 
 
-def to_pi05_instruction(label: ActiveActionLabel | str, slot: str | int) -> str:
+def to_pi05_instruction(label: ActiveActionLabel | str) -> str:
     """Map an active label to the pi0.5 natural-language instruction."""
     if label == "A":
         return "Pick up the target object from the material bin."
 
     if label == "B":
-        return f"Navigate to target slot {slot}."
+        return "Navigate to the target slot."
 
     if label == "C":
-        return f"Place the held object into target slot {slot}."
+        return "Place the held object into the target slot."
 
     if label == "D":
         return "Navigate to the material bin."
@@ -126,13 +125,11 @@ class LabelActionLoop:
         selector: LabelActionSelector,
         executor: Pi05Executor,
         task: str,
-        slot: str | int,
     ) -> None:
         self.camera = camera
         self.selector = selector
         self.executor = executor
         self.task = task
-        self.slot = slot
 
         self.current_label: ActiveActionLabel | None = None
         self.done = False
@@ -154,7 +151,6 @@ class LabelActionLoop:
             image=image,
             current_label=current_label_before,
             task=self.task,
-            slot=self.slot,
         )
         selected_label = validate_selected_label(selected_label)
         decision = decide_label_transition(
@@ -170,7 +166,7 @@ class LabelActionLoop:
             if selected_label not in ACTIVE_CANDIDATES:
                 raise ValueError(f"Cannot switch to inactive label {selected_label!r}")
 
-            instruction = to_pi05_instruction(selected_label, self.slot)
+            instruction = to_pi05_instruction(selected_label)
             self.executor.execute(instruction)
             self.current_label = selected_label
 
