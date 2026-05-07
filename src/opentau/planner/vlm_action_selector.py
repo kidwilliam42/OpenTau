@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Callable, Literal, Sequence
 
 import torch
@@ -8,6 +8,7 @@ import torch
 ActionLabel = Literal["A", "B", "C", "D", "E"]
 ActiveActionLabel = Literal["A", "B", "C", "D"]
 
+DEFAULT_QWEN3_VL_MODEL = "Qwen/Qwen3-VL-4B-Instruct"
 CANDIDATES: tuple[ActionLabel, ...] = ("A", "B", "C", "D", "E")
 ACTIVE_CANDIDATES: tuple[ActiveActionLabel, ...] = ("A", "B", "C", "D")
 
@@ -98,6 +99,107 @@ class VLMActionSelector:
         )
 
 
+@dataclass
+class Qwen3VLActionSelector:
+    """Qwen3-VL-4B-Instruct selector that scores fixed action labels by logits."""
+
+    model_name: str = DEFAULT_QWEN3_VL_MODEL
+    device: str | torch.device = "cuda"
+    processor: Any | None = None
+    model: Any | None = None
+    torch_dtype: Any = "auto"
+    device_map: Any | None = "auto"
+    token_ids: dict[ActionLabel, int] = field(init=False)
+
+    def __post_init__(self) -> None:
+        self.device = str(self.device) if isinstance(self.device, torch.device) else self.device
+        if self.device == "cuda" and not torch.cuda.is_available():
+            self.device = "cpu"
+
+        if self.processor is None or self.model is None:
+            self.processor, self.model = self._load_model_and_processor()
+
+        tokenizer = getattr(self.processor, "tokenizer", self.processor)
+        self.token_ids = {label: token_id_from_tokenizer(tokenizer, label) for label in CANDIDATES}
+        self.input_device = self._resolve_input_device()
+        if hasattr(self.model, "eval"):
+            self.model.eval()
+
+    def select(
+        self,
+        image: Any,
+        current_label: ActiveActionLabel | str | None,
+        task: str,
+        slot: str | int | None = None,
+    ) -> ActionLabel:
+        return vlm_select_action_by_logits(
+            image=image,
+            current_label=current_label,
+            task=task,
+            vlm=self,
+            token_id_fn=self.token_ids.__getitem__,
+            slot=slot,
+        )
+
+    def forward(self, image: Any, prompt: str) -> Any:
+        """Run one Qwen3-VL forward pass and return next-token logits."""
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image", "image": image},
+                    {"type": "text", "text": prompt},
+                ],
+            }
+        ]
+        text = self.processor.apply_chat_template(
+            messages,
+            tokenize=False,
+            add_generation_prompt=True,
+        )
+        inputs = self.processor(
+            text=[text],
+            images=[image],
+            return_tensors="pt",
+        )
+        inputs = _move_inputs_to_device(inputs, self.input_device)
+
+        with torch.inference_mode():
+            return self.model(**inputs)
+
+    def _load_model_and_processor(self) -> tuple[Any, Any]:
+        try:
+            from transformers import AutoProcessor, Qwen3VLForConditionalGeneration
+        except ImportError as exc:
+            raise ImportError(
+                "Qwen3-VL action selection requires a transformers version that provides "
+                "`Qwen3VLForConditionalGeneration`. Install a Qwen3-VL-compatible "
+                "transformers build before constructing Qwen3VLActionSelector."
+            ) from exc
+
+        processor = AutoProcessor.from_pretrained(self.model_name)
+        if self.device.startswith("cuda"):
+            model = Qwen3VLForConditionalGeneration.from_pretrained(
+                self.model_name,
+                torch_dtype=self.torch_dtype,
+                device_map=self.device_map,
+            )
+        else:
+            model = Qwen3VLForConditionalGeneration.from_pretrained(
+                self.model_name,
+                torch_dtype=self.torch_dtype,
+            )
+            model.to(torch.device(self.device))
+
+        return processor, model
+
+    def _resolve_input_device(self) -> torch.device:
+        try:
+            return next(self.model.parameters()).device
+        except (AttributeError, StopIteration, TypeError):
+            return torch.device(self.device)
+
+
 def normalize_current_label(current_label: ActiveActionLabel | str | None) -> ActiveActionLabel | Literal["NONE"]:
     if current_label is None:
         return "NONE"
@@ -169,3 +271,13 @@ def _score_label(logits: Any, token_id: int) -> float:
         return float(logits[token_id].detach().cpu().item())
 
     return float(logits[token_id])
+
+
+def _move_inputs_to_device(inputs: Any, device: torch.device) -> Any:
+    if isinstance(inputs, dict):
+        return {key: value.to(device) if hasattr(value, "to") else value for key, value in inputs.items()}
+
+    if hasattr(inputs, "to"):
+        return inputs.to(device)
+
+    return inputs
