@@ -84,3 +84,14 @@ from .high_level_planner import HighLevelPlanner as HighLevelPlanner
 from .high_level_planner import NavHighLevelPlanner as NavHighLevelPlanner
 from .qwen3_vl_planner import QwenHighLevelPlanner as QwenHighLevelPlanner
 from .utils.memory import Memory as Memory
+from .vlm_action_selector import (
+    ACTIVE_CANDIDATES,
+    CANDIDATES,
+    ActionLabel,
+    ActiveActionLabel,
+    VLMActionSelector,
+    build_select_action_prompt,
+    token_id_from_tokenizer,
+    validate_selected_label,
+    vlm_select_action_by_logits,
+)
