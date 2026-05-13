@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import io
 import threading
+import time
 from dataclasses import dataclass
 from typing import Any
 
@@ -44,6 +45,7 @@ class RosImageTopicCamera:
         self.compressed = compressed
         self.timeout_s = timeout_s
         self._latest_image: Image.Image | None = None
+        self._latest_image_monotonic_s: float | None = None
         self._lock = threading.Lock()
         self._image_ready = threading.Event()
 
@@ -65,12 +67,21 @@ class RosImageTopicCamera:
         with self._lock:
             if self._latest_image is None:
                 raise RuntimeError(f"No image has been decoded from ROS topic {self.topic!r}.")
+            if self._latest_image_monotonic_s is None:
+                raise RuntimeError(f"No image timestamp has been recorded for ROS topic {self.topic!r}.")
+            image_age_s = time.monotonic() - self._latest_image_monotonic_s
+            if image_age_s > self.timeout_s:
+                raise TimeoutError(
+                    f"Latest image on ROS topic {self.topic!r} is stale "
+                    f"({image_age_s:.2f}s old, timeout {self.timeout_s:.2f}s)."
+                )
             return self._latest_image.copy()
 
     def _on_image(self, msg: Any) -> None:
         image = compressed_image_msg_to_pil(msg) if self.compressed else image_msg_to_pil(msg)
         with self._lock:
             self._latest_image = image
+            self._latest_image_monotonic_s = time.monotonic()
             self._image_ready.set()
 
 
@@ -166,7 +177,13 @@ def run_ros_label_action_loop(
             if rate is not None:
                 rate.sleep()
     except KeyboardInterrupt:
-        loop.executor.stop()
+        _safe_stop(loop.executor, rospy)
+    except Exception:
+        _safe_stop(loop.executor, rospy)
+        raise
+    else:
+        if not loop.done:
+            _safe_stop(loop.executor, rospy)
 
 
 def compressed_image_msg_to_pil(msg: Any) -> Image.Image:
@@ -179,17 +196,29 @@ def image_msg_to_pil(msg: Any) -> Image.Image:
     encoding = str(getattr(msg, "encoding", "rgb8")).lower()
     height = int(msg.height)
     width = int(msg.width)
+    step = int(getattr(msg, "step", 0))
     data = bytes(msg.data)
 
     if encoding in {"rgb8", "bgr8"}:
-        array = np.frombuffer(data, dtype=np.uint8).reshape(height, width, 3)
+        channels = 3
+        row_bytes = width * channels
+        step = step or row_bytes
+        if step < row_bytes:
+            raise ValueError(f"ROS image step {step} is too small for {width}x{encoding}.")
+        array = np.frombuffer(data, dtype=np.uint8).reshape(height, step)
+        array = array[:, :row_bytes].reshape(height, width, channels)
         if encoding == "bgr8":
             array = array[:, :, ::-1]
-        return Image.fromarray(array, mode="RGB")
+        return Image.fromarray(np.ascontiguousarray(array), mode="RGB")
 
     if encoding in {"mono8", "8uc1"}:
-        array = np.frombuffer(data, dtype=np.uint8).reshape(height, width)
-        return Image.fromarray(array, mode="L").convert("RGB")
+        row_bytes = width
+        step = step or row_bytes
+        if step < row_bytes:
+            raise ValueError(f"ROS image step {step} is too small for {width}x{encoding}.")
+        array = np.frombuffer(data, dtype=np.uint8).reshape(height, step)
+        array = array[:, :row_bytes].reshape(height, width)
+        return Image.fromarray(np.ascontiguousarray(array), mode="L").convert("RGB")
 
     raise ValueError(f"Unsupported ROS image encoding {encoding!r}.")
 
@@ -220,3 +249,11 @@ def _load_rospy() -> Any:
         raise ImportError("ROS deployment requires rospy from a ROS1 installation.") from exc
 
     return rospy
+
+
+def _safe_stop(executor: Any, ros_api: Any) -> None:
+    try:
+        executor.stop()
+    except Exception as exc:
+        if hasattr(ros_api, "logerr"):
+            ros_api.logerr("Failed to publish VLA stop command: %s", exc)

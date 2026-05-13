@@ -1,7 +1,11 @@
 import io
+import time
+from types import SimpleNamespace
 
+import pytest
 from PIL import Image
 
+import opentau.agents.ros_label_action_loop as ros_loop
 from opentau.agents.ros_label_action_loop import (
     RosImageTopicCamera,
     RosInstructionExecutor,
@@ -16,11 +20,13 @@ class FakeCompressedImage:
 
 
 class FakeImage:
-    def __init__(self, data, height, width, encoding):
+    def __init__(self, data, height, width, encoding, step=None):
         self.data = data
         self.height = height
         self.width = width
         self.encoding = encoding
+        if step is not None:
+            self.step = step
 
 
 class FakeString:
@@ -40,6 +46,7 @@ class FakeRospy:
     def __init__(self):
         self.subscriptions = []
         self.publishers = {}
+        self.log_errors = []
 
     def subscriber(self, topic, message_type, callback, queue_size):
         subscription = {
@@ -60,9 +67,53 @@ class FakeRospy:
         }
         return publisher
 
+    def init_node(self, node_name, anonymous=False):
+        self.node_name = node_name
+        self.anonymous = anonymous
+
+    def rate(self, hz):
+        return FakeRate(hz)
+
+    def is_shutdown(self):
+        return False
+
+    def logerr(self, message, *args):
+        self.log_errors.append(message % args if args else message)
+
+
+class FakeRate:
+    def __init__(self, hz):
+        self.hz = hz
+        self.sleep_calls = 0
+
+    def sleep(self):
+        self.sleep_calls += 1
+
+
+class FakeExecutor:
+    def __init__(self):
+        self.stop_calls = 0
+
+    def stop(self):
+        self.stop_calls += 1
+
+
+class FakeLoop:
+    def __init__(self, done=False, fail_on_step=False):
+        self.done = done
+        self.fail_on_step = fail_on_step
+        self.step_calls = 0
+        self.executor = FakeExecutor()
+
+    def step(self):
+        self.step_calls += 1
+        if self.fail_on_step:
+            raise RuntimeError("planner failed")
+
 
 FakeRospy.Subscriber = FakeRospy.subscriber
 FakeRospy.Publisher = FakeRospy.publisher
+FakeRospy.Rate = FakeRospy.rate
 
 
 def _jpeg_bytes() -> bytes:
@@ -93,6 +144,20 @@ def test_image_msg_to_pil_decodes_bgr8_image():
     assert [image.getpixel((0, 0)), image.getpixel((1, 0))] == [(10, 20, 30), (40, 50, 60)]
 
 
+def test_image_msg_to_pil_uses_step_to_ignore_row_padding():
+    msg = FakeImage(
+        data=bytes([30, 20, 10, 60, 50, 40, 255, 255]),
+        height=1,
+        width=2,
+        encoding="bgr8",
+        step=8,
+    )
+
+    image = image_msg_to_pil(msg)
+
+    assert [image.getpixel((0, 0)), image.getpixel((1, 0))] == [(10, 20, 30), (40, 50, 60)]
+
+
 def test_ros_image_topic_camera_returns_latest_decoded_image():
     ros_api = FakeRospy()
     camera = RosImageTopicCamera(
@@ -107,6 +172,21 @@ def test_ros_image_topic_camera_returns_latest_decoded_image():
     assert image.mode == "RGB"
     assert image.size == (2, 1)
     assert ros_api.subscriptions[0]["topic"] == "/camera/image_compressed"
+
+
+def test_ros_image_topic_camera_rejects_stale_images():
+    ros_api = FakeRospy()
+    camera = RosImageTopicCamera(
+        topic="/camera/image_compressed",
+        timeout_s=0.1,
+        message_type=FakeCompressedImage,
+        ros_api=ros_api,
+    )
+    ros_api.subscriptions[0]["callback"](FakeCompressedImage(_jpeg_bytes()))
+    camera._latest_image_monotonic_s = time.monotonic() - 1.0
+
+    with pytest.raises(TimeoutError, match="stale"):
+        camera.capture()
 
 
 def test_ros_instruction_executor_publishes_plain_instruction_and_stop():
@@ -138,3 +218,35 @@ def test_ros_instruction_executor_ignores_empty_instruction():
 
     task_pub = ros_api.publishers["/lerobot/set_task"]["publisher"]
     assert task_pub.messages == []
+
+
+def test_run_ros_label_action_loop_stops_when_max_cycles_reached(monkeypatch):
+    ros_api = FakeRospy()
+    loop = FakeLoop()
+    monkeypatch.setattr(ros_loop, "_load_rospy", lambda: ros_api)
+    monkeypatch.setattr(ros_loop, "create_ros_label_action_loop", lambda **kwargs: loop)
+
+    ros_loop.run_ros_label_action_loop(
+        selector=object(),
+        cfg=SimpleNamespace(cycle_period_s=1.0),
+        max_cycles=0,
+    )
+
+    assert loop.step_calls == 0
+    assert loop.executor.stop_calls == 1
+
+
+def test_run_ros_label_action_loop_stops_and_reraises_on_exception(monkeypatch):
+    ros_api = FakeRospy()
+    loop = FakeLoop(fail_on_step=True)
+    monkeypatch.setattr(ros_loop, "_load_rospy", lambda: ros_api)
+    monkeypatch.setattr(ros_loop, "create_ros_label_action_loop", lambda **kwargs: loop)
+
+    with pytest.raises(RuntimeError, match="planner failed"):
+        ros_loop.run_ros_label_action_loop(
+            selector=object(),
+            cfg=SimpleNamespace(cycle_period_s=1.0),
+            max_cycles=1,
+        )
+
+    assert loop.executor.stop_calls == 1
