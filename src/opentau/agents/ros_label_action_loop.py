@@ -159,6 +159,7 @@ def run_ros_label_action_loop(
     cfg: RosLabelActionLoopConfig,
     node_name: str = "opentau_label_action_loop",
     max_cycles: int | None = None,
+    stop_on_max_cycles: bool = False,
 ) -> None:
     """Run the label action loop as a ROS1 rospy node."""
     rospy = _load_rospy()
@@ -167,9 +168,11 @@ def run_ros_label_action_loop(
     rate = None if cfg.cycle_period_s <= 0 else rospy.Rate(1.0 / cfg.cycle_period_s)
 
     cycles = 0
+    stopped_by_cycle_limit = False
     try:
         while not rospy.is_shutdown() and not loop.done:
             if max_cycles is not None and cycles >= max_cycles:
+                stopped_by_cycle_limit = True
                 break
 
             loop.step()
@@ -182,7 +185,7 @@ def run_ros_label_action_loop(
         _safe_stop(loop.executor, rospy)
         raise
     else:
-        if not loop.done:
+        if not loop.done and (not stopped_by_cycle_limit or stop_on_max_cycles):
             _safe_stop(loop.executor, rospy)
 
 

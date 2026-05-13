@@ -41,7 +41,12 @@ def main() -> None:
         "--max-cycles",
         type=int,
         default=None,
-        help="Optional safety limit for debugging; omit for normal deployment.",
+        help="Optional VLM decision-cycle limit for debugging; omit for normal deployment.",
+    )
+    parser.add_argument(
+        "--stop-on-max-cycles",
+        action="store_true",
+        help="Publish stop when --max-cycles is reached. Disabled by default.",
     )
     args = parser.parse_args()
 
@@ -55,7 +60,12 @@ def main() -> None:
         capture_timeout_s=args.capture_timeout_s,
         cycle_period_s=args.cycle_period_s,
     )
-    run_ros_label_action_loop(selector=selector, cfg=cfg, max_cycles=args.max_cycles)
+    run_ros_label_action_loop(
+        selector=selector,
+        cfg=cfg,
+        max_cycles=args.max_cycles,
+        stop_on_max_cycles=args.stop_on_max_cycles,
+    )
 
 
 if __name__ == "__main__":

@@ -220,7 +220,7 @@ def test_ros_instruction_executor_ignores_empty_instruction():
     assert task_pub.messages == []
 
 
-def test_run_ros_label_action_loop_stops_when_max_cycles_reached(monkeypatch):
+def test_run_ros_label_action_loop_does_not_stop_when_max_cycles_reached_by_default(monkeypatch):
     ros_api = FakeRospy()
     loop = FakeLoop()
     monkeypatch.setattr(ros_loop, "_load_rospy", lambda: ros_api)
@@ -230,6 +230,23 @@ def test_run_ros_label_action_loop_stops_when_max_cycles_reached(monkeypatch):
         selector=object(),
         cfg=SimpleNamespace(cycle_period_s=1.0),
         max_cycles=0,
+    )
+
+    assert loop.step_calls == 0
+    assert loop.executor.stop_calls == 0
+
+
+def test_run_ros_label_action_loop_can_stop_when_max_cycles_reached(monkeypatch):
+    ros_api = FakeRospy()
+    loop = FakeLoop()
+    monkeypatch.setattr(ros_loop, "_load_rospy", lambda: ros_api)
+    monkeypatch.setattr(ros_loop, "create_ros_label_action_loop", lambda **kwargs: loop)
+
+    ros_loop.run_ros_label_action_loop(
+        selector=object(),
+        cfg=SimpleNamespace(cycle_period_s=1.0),
+        max_cycles=0,
+        stop_on_max_cycles=True,
     )
 
     assert loop.step_calls == 0
