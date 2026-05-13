@@ -1,5 +1,4 @@
 import io
-import json
 
 from PIL import Image
 
@@ -113,38 +112,29 @@ def test_ros_image_topic_camera_returns_latest_decoded_image():
 def test_ros_instruction_executor_publishes_plain_instruction_and_stop():
     ros_api = FakeRospy()
     executor = RosInstructionExecutor(
-        instruction_topic="/robot/pi05_instruction",
-        stop_topic="/robot/pi05_stop",
+        task_topic="/lerobot/set_task",
         string_msg_type=FakeString,
         ros_api=ros_api,
     )
 
-    executor.execute("Navigate to the target slot.")
+    executor.execute("Navigate to target slot A1.")
     executor.stop()
 
-    instruction_pub = ros_api.publishers["/robot/pi05_instruction"]["publisher"]
-    stop_pub = ros_api.publishers["/robot/pi05_stop"]["publisher"]
-    assert instruction_pub.messages[0].data == "Navigate to the target slot."
-    assert stop_pub.messages[0].data == "STOP"
+    task_pub = ros_api.publishers["/lerobot/set_task"]["publisher"]
+    assert task_pub.messages[0].data == "Navigate to target slot A1."
+    assert task_pub.messages[1].data == "stop"
+    assert ros_api.publishers["/lerobot/set_task"]["queue_size"] == 1
 
 
-def test_ros_instruction_executor_can_publish_json_payloads():
+def test_ros_instruction_executor_ignores_empty_instruction():
     ros_api = FakeRospy()
     executor = RosInstructionExecutor(
-        instruction_topic="/robot/pi05_instruction",
-        stop_topic="/robot/pi05_stop",
-        publish_json=True,
+        task_topic="/lerobot/set_task",
         string_msg_type=FakeString,
         ros_api=ros_api,
     )
 
-    executor.execute("Place the held object into the target slot.")
-    executor.stop()
+    executor.execute("  ")
 
-    instruction_pub = ros_api.publishers["/robot/pi05_instruction"]["publisher"]
-    stop_pub = ros_api.publishers["/robot/pi05_stop"]["publisher"]
-    assert json.loads(instruction_pub.messages[0].data) == {
-        "command": "execute",
-        "instruction": "Place the held object into the target slot.",
-    }
-    assert json.loads(stop_pub.messages[0].data) == {"command": "stop", "instruction": "STOP"}
+    task_pub = ros_api.publishers["/lerobot/set_task"]["publisher"]
+    assert task_pub.messages == []

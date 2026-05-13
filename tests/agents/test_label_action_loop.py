@@ -46,10 +46,18 @@ class FakeExecutor:
 
 
 def test_to_pi05_instruction_maps_active_labels():
-    assert to_pi05_instruction("A") == "Pick up the target object from the material bin."
-    assert to_pi05_instruction("B") == "Navigate to the target slot."
-    assert to_pi05_instruction("C") == "Place the held object into the target slot."
-    assert to_pi05_instruction("D") == "Navigate to the material bin."
+    assert to_pi05_instruction("A", "A1") == "pick a part"
+    assert to_pi05_instruction("B", "A1") == "Navigate to target slot A1."
+    assert to_pi05_instruction("C", "A1") == "place a part into the box with A1 label."
+    assert to_pi05_instruction("D", "A1") == "Navigate to the material bin."
+
+
+def test_to_pi05_instruction_requires_slot_for_slot_actions():
+    with pytest.raises(ValueError):
+        to_pi05_instruction("B")
+
+    with pytest.raises(ValueError):
+        to_pi05_instruction("C")
 
 
 def test_to_pi05_instruction_rejects_done_label():
@@ -73,6 +81,7 @@ def test_label_action_loop_stops_without_executing_done_label():
         selector=selector,
         executor=executor,
         task="Put the object into target slot A1.",
+        slot="A1",
     )
 
     result = loop.run()
@@ -95,6 +104,7 @@ def test_label_action_loop_continues_same_label_without_restarting_executor():
         selector=selector,
         executor=executor,
         task="Put the object into target slot A1.",
+        slot="A1",
     )
 
     result = loop.run()
@@ -103,8 +113,8 @@ def test_label_action_loop_continues_same_label_without_restarting_executor():
     assert result.cycles == 4
     assert result.current_label == "C"
     assert executor.instructions == [
-        "Navigate to the target slot.",
-        "Place the held object into the target slot.",
+        "Navigate to target slot A1.",
+        "place a part into the box with A1 label.",
     ]
     assert executor.stop_calls == 1
     assert [call["current_label"] for call in selector.calls] == [None, "B", "B", "C"]
@@ -125,6 +135,7 @@ def test_label_action_loop_can_run_bounded_cycles_without_done():
         selector=selector,
         executor=executor,
         task="Pick the object",
+        slot="A1",
     )
 
     result = loop.run(max_cycles=3)
@@ -132,5 +143,5 @@ def test_label_action_loop_can_run_bounded_cycles_without_done():
     assert not result.done
     assert result.cycles == 3
     assert result.current_label == "A"
-    assert executor.instructions == ["Pick up the target object from the material bin."]
+    assert executor.instructions == ["pick a part"]
     assert executor.stop_calls == 0

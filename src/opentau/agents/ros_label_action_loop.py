@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import io
-import json
 import threading
 from dataclasses import dataclass
 from typing import Any
@@ -17,16 +16,15 @@ class RosLabelActionLoopConfig:
     """ROS1 topic configuration for deploying the label action loop."""
 
     task: str
+    slot: str
     image_topic: str = "/camera1/image_compressed"
-    instruction_topic: str = "/opentau/pi05_instruction"
-    stop_topic: str = "/opentau/pi05_stop"
+    task_topic: str = "/lerobot/set_task"
     image_is_compressed: bool = True
     capture_timeout_s: float = 5.0
-    cycle_period_s: float = 0.5
+    cycle_period_s: float = 1.0
     camera_queue_size: int = 1
-    publisher_queue_size: int = 10
-    publish_json: bool = False
-    stop_command: str = "STOP"
+    publisher_queue_size: int = 1
+    stop_command: str = "stop"
 
 
 class RosImageTopicCamera:
@@ -77,15 +75,13 @@ class RosImageTopicCamera:
 
 
 class RosInstructionExecutor:
-    """pi0.5 executor adapter that publishes instructions over ROS string topics."""
+    """VLA executor adapter that publishes instructions over one ROS String topic."""
 
     def __init__(
         self,
-        instruction_topic: str = "/opentau/pi05_instruction",
-        stop_topic: str = "/opentau/pi05_stop",
-        queue_size: int = 10,
-        publish_json: bool = False,
-        stop_command: str = "STOP",
+        task_topic: str = "/lerobot/set_task",
+        queue_size: int = 1,
+        stop_command: str = "stop",
         string_msg_type: Any | None = None,
         ros_api: Any | None = None,
     ) -> None:
@@ -93,39 +89,25 @@ class RosInstructionExecutor:
         if string_msg_type is None:
             string_msg_type = _load_ros_string_message_type()
 
-        self.instruction_topic = instruction_topic
-        self.stop_topic = stop_topic
-        self.publish_json = publish_json
+        self.task_topic = task_topic
         self.stop_command = stop_command
         self.string_msg_type = string_msg_type
-        self.instruction_publisher = self.ros_api.Publisher(
-            instruction_topic,
-            string_msg_type,
-            queue_size=queue_size,
-        )
-        self.stop_publisher = self.ros_api.Publisher(
-            stop_topic,
+        self.publisher = self.ros_api.Publisher(
+            task_topic,
             string_msg_type,
             queue_size=queue_size,
         )
 
     def execute(self, instruction: str) -> None:
-        """Publish a new pi0.5 instruction for the terminal server."""
-        payload = (
-            json.dumps({"command": "execute", "instruction": instruction})
-            if self.publish_json
-            else instruction
-        )
-        self.instruction_publisher.publish(self._make_message(payload))
+        """Publish a new VLA task instruction on /lerobot/set_task."""
+        instruction = instruction.strip()
+        if not instruction:
+            return
+        self.publisher.publish(self._make_message(instruction))
 
     def stop(self) -> None:
-        """Publish a stop command for the terminal server."""
-        payload = (
-            json.dumps({"command": "stop", "instruction": self.stop_command})
-            if self.publish_json
-            else self.stop_command
-        )
-        self.stop_publisher.publish(self._make_message(payload))
+        """Publish the stop command on the same VLA task topic."""
+        self.publisher.publish(self._make_message(self.stop_command))
 
     def _make_message(self, payload: str) -> Any:
         msg = self.string_msg_type()
@@ -147,10 +129,8 @@ def create_ros_label_action_loop(
         ros_api=ros_api,
     )
     executor = RosInstructionExecutor(
-        instruction_topic=cfg.instruction_topic,
-        stop_topic=cfg.stop_topic,
+        task_topic=cfg.task_topic,
         queue_size=cfg.publisher_queue_size,
-        publish_json=cfg.publish_json,
         stop_command=cfg.stop_command,
         ros_api=ros_api,
     )
@@ -159,6 +139,7 @@ def create_ros_label_action_loop(
         selector=selector,
         executor=executor,
         task=cfg.task,
+        slot=cfg.slot,
     )
 
 

@@ -91,16 +91,20 @@ def decide_label_transition(
     return LabelDecision.SWITCH
 
 
-def to_pi05_instruction(label: ActiveActionLabel | str) -> str:
+def to_pi05_instruction(label: ActiveActionLabel | str, slot: str | int | None = None) -> str:
     """Map an active label to the pi0.5 natural-language instruction."""
     if label == "A":
-        return "Pick up the target object from the material bin."
+        return "pick a part"
 
     if label == "B":
-        return "Navigate to the target slot."
+        if slot is None:
+            raise ValueError("slot is required for label B")
+        return f"Navigate to target slot {slot}."
 
     if label == "C":
-        return "Place the held object into the target slot."
+        if slot is None:
+            raise ValueError("slot is required for label C")
+        return f"place a part into the box with {slot} label."
 
     if label == "D":
         return "Navigate to the material bin."
@@ -125,11 +129,13 @@ class LabelActionLoop:
         selector: LabelActionSelector,
         executor: Pi05Executor,
         task: str,
+        slot: str | int | None = None,
     ) -> None:
         self.camera = camera
         self.selector = selector
         self.executor = executor
         self.task = task
+        self.slot = slot
 
         self.current_label: ActiveActionLabel | None = None
         self.done = False
@@ -166,7 +172,7 @@ class LabelActionLoop:
             if selected_label not in ACTIVE_CANDIDATES:
                 raise ValueError(f"Cannot switch to inactive label {selected_label!r}")
 
-            instruction = to_pi05_instruction(selected_label)
+            instruction = to_pi05_instruction(selected_label, self.slot)
             self.executor.execute(instruction)
             self.current_label = selected_label
 
