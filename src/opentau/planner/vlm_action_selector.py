@@ -160,29 +160,40 @@ class Qwen3VLActionSelector:
 
     def _load_model_and_processor(self) -> tuple[Any, Any]:
         try:
-            from transformers import AutoProcessor, Qwen3VLForConditionalGeneration
+            from transformers import AutoModelForImageTextToText, AutoProcessor
         except ImportError as exc:
             raise ImportError(
-                "Qwen3-VL action selection requires a transformers version that provides "
-                "`Qwen3VLForConditionalGeneration`. Install a Qwen3-VL-compatible "
-                "transformers build before constructing Qwen3VLActionSelector."
+                "Qwen3-VL action selection requires transformers with AutoProcessor "
+                "and AutoModelForImageTextToText support."
             ) from exc
 
-        processor = AutoProcessor.from_pretrained(self.model_name)
+        processor = AutoProcessor.from_pretrained(self.model_name, trust_remote_code=True)
+        model_class = self._resolve_qwen3_vl_model_class(AutoModelForImageTextToText)
         if self.device.startswith("cuda"):
-            model = Qwen3VLForConditionalGeneration.from_pretrained(
+            model = model_class.from_pretrained(
                 self.model_name,
                 torch_dtype=self.torch_dtype,
                 device_map=self.device_map,
+                trust_remote_code=True,
             )
         else:
-            model = Qwen3VLForConditionalGeneration.from_pretrained(
+            model = model_class.from_pretrained(
                 self.model_name,
                 torch_dtype=self.torch_dtype,
+                trust_remote_code=True,
             )
             model.to(torch.device(self.device))
 
         return processor, model
+
+    def _resolve_qwen3_vl_model_class(self, fallback_model_class: Any) -> Any:
+        """Use the dedicated Qwen3-VL class when available, otherwise fall back to AutoModel."""
+        try:
+            from transformers import Qwen3VLForConditionalGeneration
+
+            return Qwen3VLForConditionalGeneration
+        except ImportError:
+            return fallback_model_class
 
     def _resolve_input_device(self) -> torch.device:
         try:
