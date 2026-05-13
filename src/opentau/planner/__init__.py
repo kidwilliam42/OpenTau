@@ -80,9 +80,6 @@ Example:
         ... )
 """
 
-from .high_level_planner import HighLevelPlanner as HighLevelPlanner
-from .high_level_planner import NavHighLevelPlanner as NavHighLevelPlanner
-from .qwen3_vl_planner import QwenHighLevelPlanner as QwenHighLevelPlanner
 from .utils.memory import Memory as Memory
 from .vlm_action_selector import ACTIVE_CANDIDATES as ACTIVE_CANDIDATES
 from .vlm_action_selector import CANDIDATES as CANDIDATES
@@ -95,3 +92,18 @@ from .vlm_action_selector import build_select_action_prompt as build_select_acti
 from .vlm_action_selector import token_id_from_tokenizer as token_id_from_tokenizer
 from .vlm_action_selector import validate_selected_label as validate_selected_label
 from .vlm_action_selector import vlm_select_action_by_logits as vlm_select_action_by_logits
+
+
+def __getattr__(name: str):
+    """Lazily load heavy planner classes only when they are explicitly requested."""
+    if name in {"HighLevelPlanner", "NavHighLevelPlanner"}:
+        from .high_level_planner import HighLevelPlanner, NavHighLevelPlanner
+
+        return {"HighLevelPlanner": HighLevelPlanner, "NavHighLevelPlanner": NavHighLevelPlanner}[name]
+
+    if name == "QwenHighLevelPlanner":
+        from .qwen3_vl_planner import QwenHighLevelPlanner
+
+        return QwenHighLevelPlanner
+
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
