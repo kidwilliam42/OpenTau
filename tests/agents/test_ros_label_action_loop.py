@@ -1,4 +1,5 @@
 import io
+import threading
 import time
 from types import SimpleNamespace
 
@@ -32,6 +33,44 @@ class FakeImage:
 class FakeString:
     def __init__(self):
         self.data = ""
+
+
+class FakeStamp:
+    def __init__(self):
+        self.secs = None
+        self.nsecs = None
+
+
+class FakeHeader:
+    def __init__(self):
+        self.seq = None
+        self.stamp = FakeStamp()
+        self.frame_id = None
+
+
+class FakePoint:
+    def __init__(self):
+        self.x = None
+        self.y = None
+        self.z = None
+
+
+class FakePercCmd:
+    def __init__(self):
+        self.header = FakeHeader()
+        self.action_id = None
+        self.perc_kind = None
+        self.req_id = None
+        self.on_off = None
+        self.follow_name = None
+        self.angle = None
+        self.point_name = None
+        self.point = FakePoint()
+
+
+class FakePercState:
+    def __init__(self, exe_state):
+        self.exe_state = exe_state
 
 
 class FakePublisher:
@@ -194,6 +233,8 @@ def test_ros_instruction_executor_publishes_plain_instruction_and_stop():
     executor = RosInstructionExecutor(
         task_topic="/lerobot/set_task",
         string_msg_type=FakeString,
+        perc_cmd_msg_type=FakePercCmd,
+        perc_state_msg_type=FakePercState,
         ros_api=ros_api,
     )
 
@@ -211,10 +252,86 @@ def test_ros_instruction_executor_ignores_empty_instruction():
     executor = RosInstructionExecutor(
         task_topic="/lerobot/set_task",
         string_msg_type=FakeString,
+        perc_cmd_msg_type=FakePercCmd,
+        perc_state_msg_type=FakePercState,
         ros_api=ros_api,
     )
 
     executor.execute("  ")
+
+    task_pub = ros_api.publishers["/lerobot/set_task"]["publisher"]
+    assert task_pub.messages == []
+
+
+def test_ros_instruction_executor_routes_nav_slot_through_slam_then_reset_place():
+    ros_api = FakeRospy()
+    executor = RosInstructionExecutor(
+        task_topic="/lerobot/set_task",
+        slam_command_topic="/planning/perc_cmd",
+        slam_state_topic="/planning/perc_state",
+        navigation_timeout_s=0.5,
+        string_msg_type=FakeString,
+        perc_cmd_msg_type=FakePercCmd,
+        perc_state_msg_type=FakePercState,
+        ros_api=ros_api,
+    )
+
+    def complete_navigation():
+        ros_api.subscriptions[0]["callback"](FakePercState(exe_state=2))
+
+    timer = threading.Timer(0.01, complete_navigation)
+    timer.start()
+    executor.execute_label("B", "Navigate to target slot A1.")
+    timer.join()
+
+    slam_msg = ros_api.publishers["/planning/perc_cmd"]["publisher"].messages[0]
+    task_pub = ros_api.publishers["/lerobot/set_task"]["publisher"]
+    assert slam_msg.point_name == "B_point"
+    assert slam_msg.perc_kind == 23
+    assert slam_msg.point.x == 0.0
+    assert task_pub.messages[0].data == "reset_place"
+
+
+def test_ros_instruction_executor_routes_nav_bin_through_slam_then_reset_pick():
+    ros_api = FakeRospy()
+    executor = RosInstructionExecutor(
+        task_topic="/lerobot/set_task",
+        slam_command_topic="/planning/perc_cmd",
+        slam_state_topic="/planning/perc_state",
+        navigation_timeout_s=0.5,
+        string_msg_type=FakeString,
+        perc_cmd_msg_type=FakePercCmd,
+        perc_state_msg_type=FakePercState,
+        ros_api=ros_api,
+    )
+
+    def complete_navigation():
+        ros_api.subscriptions[0]["callback"](FakePercState(exe_state=2))
+
+    timer = threading.Timer(0.01, complete_navigation)
+    timer.start()
+    executor.execute_label("D", "Navigate to the material bin.")
+    timer.join()
+
+    slam_msg = ros_api.publishers["/planning/perc_cmd"]["publisher"].messages[0]
+    task_pub = ros_api.publishers["/lerobot/set_task"]["publisher"]
+    assert slam_msg.point_name == "A_point"
+    assert task_pub.messages[0].data == "reset_pick"
+
+
+def test_ros_instruction_executor_times_out_waiting_for_slam_completion():
+    ros_api = FakeRospy()
+    executor = RosInstructionExecutor(
+        task_topic="/lerobot/set_task",
+        navigation_timeout_s=0.01,
+        string_msg_type=FakeString,
+        perc_cmd_msg_type=FakePercCmd,
+        perc_state_msg_type=FakePercState,
+        ros_api=ros_api,
+    )
+
+    with pytest.raises(TimeoutError, match="SLAM navigation"):
+        executor.execute_label("B", "Navigate to target slot A1.")
 
     task_pub = ros_api.publishers["/lerobot/set_task"]["publisher"]
     assert task_pub.messages == []

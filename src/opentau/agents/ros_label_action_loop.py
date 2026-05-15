@@ -20,11 +20,20 @@ class RosLabelActionLoopConfig:
     slot: str
     image_topic: str = "/camera1/image_compressed"
     task_topic: str = "/lerobot/set_task"
+    slam_command_topic: str = "/planning/perc_cmd"
+    slam_state_topic: str = "/planning/perc_state"
     image_is_compressed: bool = True
     capture_timeout_s: float = 5.0
     cycle_period_s: float = 1.0
     camera_queue_size: int = 1
     publisher_queue_size: int = 1
+    slam_queue_size: int = 1
+    nav_bin_point: str = "A_point"
+    nav_slot_point: str = "B_point"
+    navigation_done_state: int = 2
+    navigation_timeout_s: float = 60.0
+    reset_pick_command: str = "reset_pick"
+    reset_place_command: str = "reset_place"
     stop_command: str = "stop"
 
 
@@ -86,27 +95,64 @@ class RosImageTopicCamera:
 
 
 class RosInstructionExecutor:
-    """VLA executor adapter that publishes instructions over one ROS String topic."""
+    """Executor adapter for VLA tasks plus SLAM navigation requests."""
 
     def __init__(
         self,
         task_topic: str = "/lerobot/set_task",
+        slam_command_topic: str = "/planning/perc_cmd",
+        slam_state_topic: str = "/planning/perc_state",
         queue_size: int = 1,
+        slam_queue_size: int = 1,
+        nav_bin_point: str = "A_point",
+        nav_slot_point: str = "B_point",
+        navigation_done_state: int = 2,
+        navigation_timeout_s: float = 60.0,
+        reset_pick_command: str = "reset_pick",
+        reset_place_command: str = "reset_place",
         stop_command: str = "stop",
         string_msg_type: Any | None = None,
+        perc_cmd_msg_type: Any | None = None,
+        perc_state_msg_type: Any | None = None,
         ros_api: Any | None = None,
     ) -> None:
         self.ros_api = _load_rospy() if ros_api is None else ros_api
         if string_msg_type is None:
             string_msg_type = _load_ros_string_message_type()
+        if perc_cmd_msg_type is None:
+            perc_cmd_msg_type = _load_perc_cmd_message_type()
+        if perc_state_msg_type is None:
+            perc_state_msg_type = _load_perc_state_message_type()
 
         self.task_topic = task_topic
+        self.slam_command_topic = slam_command_topic
+        self.slam_state_topic = slam_state_topic
+        self.nav_bin_point = nav_bin_point
+        self.nav_slot_point = nav_slot_point
+        self.navigation_done_state = navigation_done_state
+        self.navigation_timeout_s = navigation_timeout_s
+        self.reset_pick_command = reset_pick_command
+        self.reset_place_command = reset_place_command
         self.stop_command = stop_command
         self.string_msg_type = string_msg_type
+        self.perc_cmd_msg_type = perc_cmd_msg_type
+        self._navigation_done = threading.Event()
+        self._latest_navigation_state: Any | None = None
         self.publisher = self.ros_api.Publisher(
             task_topic,
             string_msg_type,
             queue_size=queue_size,
+        )
+        self.slam_publisher = self.ros_api.Publisher(
+            slam_command_topic,
+            perc_cmd_msg_type,
+            queue_size=slam_queue_size,
+        )
+        self.slam_state_subscription = self.ros_api.Subscriber(
+            slam_state_topic,
+            perc_state_msg_type,
+            self._on_slam_state,
+            queue_size=slam_queue_size,
         )
 
     def execute(self, instruction: str) -> None:
@@ -120,9 +166,64 @@ class RosInstructionExecutor:
         """Publish the stop command on the same VLA task topic."""
         self.publisher.publish(self._make_message(self.stop_command))
 
+    def execute_label(self, label: str, instruction: str) -> None:
+        """Execute label-aware actions, routing navigation through SLAM."""
+        if label == "B":
+            self._navigate_then_reset(self.nav_slot_point, self.reset_place_command)
+            return
+
+        if label == "D":
+            self._navigate_then_reset(self.nav_bin_point, self.reset_pick_command)
+            return
+
+        self.execute(instruction)
+
     def _make_message(self, payload: str) -> Any:
         msg = self.string_msg_type()
         msg.data = payload
+        return msg
+
+    def _navigate_then_reset(self, point_name: str, reset_command: str) -> None:
+        self._navigation_done.clear()
+        self._latest_navigation_state = None
+        self.slam_publisher.publish(self._make_perc_cmd_message(point_name))
+        if not self._navigation_done.wait(timeout=self.navigation_timeout_s):
+            raise TimeoutError(
+                f"Timed out waiting for SLAM navigation to {point_name!r} "
+                f"on {self.slam_state_topic!r}."
+            )
+        self.execute(reset_command)
+
+    def _on_slam_state(self, msg: Any) -> None:
+        self._latest_navigation_state = msg
+        if int(getattr(msg, "exe_state", -1)) == self.navigation_done_state:
+            self._navigation_done.set()
+
+    def _make_perc_cmd_message(self, point_name: str) -> Any:
+        msg = self.perc_cmd_msg_type()
+        _set_if_present(msg, "action_id", 0)
+        _set_if_present(msg, "perc_kind", 23)
+        _set_if_present(msg, "req_id", 0)
+        _set_if_present(msg, "on_off", 0)
+        _set_if_present(msg, "follow_name", "")
+        _set_if_present(msg, "angle", 0.0)
+        _set_if_present(msg, "point_name", point_name)
+
+        header = getattr(msg, "header", None)
+        if header is not None:
+            _set_if_present(header, "seq", 0)
+            _set_if_present(header, "frame_id", "")
+            stamp = getattr(header, "stamp", None)
+            if stamp is not None:
+                _set_if_present(stamp, "secs", 0)
+                _set_if_present(stamp, "nsecs", 0)
+
+        point = getattr(msg, "point", None)
+        if point is not None:
+            _set_if_present(point, "x", 0.0)
+            _set_if_present(point, "y", 0.0)
+            _set_if_present(point, "z", 0.0)
+
         return msg
 
 
@@ -141,7 +242,16 @@ def create_ros_label_action_loop(
     )
     executor = RosInstructionExecutor(
         task_topic=cfg.task_topic,
+        slam_command_topic=cfg.slam_command_topic,
+        slam_state_topic=cfg.slam_state_topic,
         queue_size=cfg.publisher_queue_size,
+        slam_queue_size=cfg.slam_queue_size,
+        nav_bin_point=cfg.nav_bin_point,
+        nav_slot_point=cfg.nav_slot_point,
+        navigation_done_state=cfg.navigation_done_state,
+        navigation_timeout_s=cfg.navigation_timeout_s,
+        reset_pick_command=cfg.reset_pick_command,
+        reset_place_command=cfg.reset_place_command,
         stop_command=cfg.stop_command,
         ros_api=ros_api,
     )
@@ -245,6 +355,24 @@ def _load_ros_string_message_type() -> Any:
     return String
 
 
+def _load_perc_cmd_message_type() -> Any:
+    try:
+        from perception_msgs.msg import PercCmd
+    except ImportError as exc:
+        raise ImportError("SLAM navigation requires perception_msgs/PercCmd.") from exc
+
+    return PercCmd
+
+
+def _load_perc_state_message_type() -> Any:
+    try:
+        from perception_msgs.msg import PercState
+    except ImportError as exc:
+        raise ImportError("SLAM navigation requires perception_msgs/PercState.") from exc
+
+    return PercState
+
+
 def _load_rospy() -> Any:
     try:
         import rospy
@@ -260,3 +388,8 @@ def _safe_stop(executor: Any, ros_api: Any) -> None:
     except Exception as exc:
         if hasattr(ros_api, "logerr"):
             ros_api.logerr("Failed to publish VLA stop command: %s", exc)
+
+
+def _set_if_present(obj: Any, name: str, value: Any) -> None:
+    if hasattr(obj, name):
+        setattr(obj, name, value)

@@ -173,7 +173,11 @@ class LabelActionLoop:
                 raise ValueError(f"Cannot switch to inactive label {selected_label!r}")
 
             instruction = to_pi05_instruction(selected_label, self.slot)
-            self.executor.execute(instruction)
+            execute_label = getattr(self.executor, "execute_label", None)
+            if callable(execute_label):
+                execute_label(selected_label, instruction)
+            else:
+                self.executor.execute(instruction)
             self.current_label = selected_label
 
         step = LabelLoopStep(

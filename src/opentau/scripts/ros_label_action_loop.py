@@ -26,6 +26,28 @@ def main() -> None:
         help="ROS std_msgs/String topic for VLA task instructions.",
     )
     parser.add_argument(
+        "--slam-command-topic",
+        default="/planning/perc_cmd",
+        help="ROS perception_msgs/PercCmd topic for SLAM navigation goals.",
+    )
+    parser.add_argument(
+        "--slam-state-topic",
+        default="/planning/perc_state",
+        help="ROS planning state topic used to detect SLAM completion.",
+    )
+    parser.add_argument("--nav-bin-point", default="A_point", help="SLAM point name for navigating to the bin.")
+    parser.add_argument(
+        "--nav-slot-point",
+        default="B_point",
+        help="SLAM point name for navigating to the target slot rack.",
+    )
+    parser.add_argument(
+        "--navigation-timeout-s",
+        type=float,
+        default=60.0,
+        help="Seconds to wait for SLAM exe_state=2 before failing safe.",
+    )
+    parser.add_argument(
         "--cycle-period-s",
         type=float,
         default=1.0,
@@ -56,6 +78,11 @@ def main() -> None:
         slot=args.slot,
         image_topic=args.image_topic,
         task_topic=args.task_topic,
+        slam_command_topic=args.slam_command_topic,
+        slam_state_topic=args.slam_state_topic,
+        nav_bin_point=args.nav_bin_point,
+        nav_slot_point=args.nav_slot_point,
+        navigation_timeout_s=args.navigation_timeout_s,
         image_is_compressed=not args.raw_image,
         capture_timeout_s=args.capture_timeout_s,
         cycle_period_s=args.cycle_period_s,

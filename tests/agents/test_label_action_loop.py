@@ -45,6 +45,15 @@ class FakeExecutor:
         self.stop_calls += 1
 
 
+class FakeLabelAwareExecutor(FakeExecutor):
+    def __init__(self):
+        super().__init__()
+        self.label_calls = []
+
+    def execute_label(self, label, instruction):
+        self.label_calls.append((label, instruction))
+
+
 def test_to_pi05_instruction_maps_active_labels():
     assert to_pi05_instruction("A", "A1") == "pick a part"
     assert to_pi05_instruction("B", "A1") == "Navigate to target slot A1."
@@ -145,3 +154,22 @@ def test_label_action_loop_can_run_bounded_cycles_without_done():
     assert result.current_label == "A"
     assert executor.instructions == ["pick a part"]
     assert executor.stop_calls == 0
+
+
+def test_label_action_loop_uses_label_aware_executor_when_available():
+    camera = FakeCamera()
+    selector = FakeSelector(["D"])
+    executor = FakeLabelAwareExecutor()
+    loop = LabelActionLoop(
+        camera=camera,
+        selector=selector,
+        executor=executor,
+        task="Navigate back to the material bin.",
+        slot="A1",
+    )
+
+    result = loop.run(max_cycles=1)
+
+    assert result.current_label == "D"
+    assert executor.instructions == []
+    assert executor.label_calls == [("D", "Navigate to the material bin.")]
