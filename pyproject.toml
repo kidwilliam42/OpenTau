@@ -100,6 +100,8 @@ dependencies = [
 opentau-train = "opentau.scripts.launch:train"
 opentau-eval = "opentau.scripts.launch:eval"
 opentau-hierarchical-eval = "opentau.scripts.launch:hierarchical_eval"
+opentau-ros-label-loop = "opentau.scripts.ros_label_action_loop:main"
+opentau-video-label-loop = "opentau.scripts.video_label_action_loop:main"
 opentau-export = "opentau.scripts.launch:export"
 opentau-dataset-viz = "opentau.scripts.launch:visualize"
 
