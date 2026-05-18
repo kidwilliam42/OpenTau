@@ -1,4 +1,3 @@
-from .hierarchical_agent import ExecutionRecord, HierarchicalAgent, SubtaskPlan
 from .label_action_loop import (
     Camera,
     LabelActionLoop,
@@ -41,3 +40,17 @@ __all__ = [
     "decide_label_transition",
     "to_pi05_instruction",
 ]
+
+
+def __getattr__(name: str):
+    """Lazily load torch-dependent hierarchical agent classes."""
+    if name in {"ExecutionRecord", "HierarchicalAgent", "SubtaskPlan"}:
+        from .hierarchical_agent import ExecutionRecord, HierarchicalAgent, SubtaskPlan
+
+        return {
+            "ExecutionRecord": ExecutionRecord,
+            "HierarchicalAgent": HierarchicalAgent,
+            "SubtaskPlan": SubtaskPlan,
+        }[name]
+
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

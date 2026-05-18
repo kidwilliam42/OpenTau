@@ -54,20 +54,12 @@ When implementing a new policy class (e.g., `DiffusionPolicy`), follow these ste
 """
 
 import itertools
-import warnings
+import os
 
 from opentau.__version__ import __version__  # noqa: F401
 
-try:
+if os.environ.get("OPENTAU_ENABLE_TRANSFORMERS_PATCH") == "1":
     from opentau.utils import transformers_patch  # noqa: F401
-except Exception as exc:
-    warnings.warn(
-        "Skipping OpenTau transformers monkey patches during package import. "
-        "Policy/model code that relies on these patches may fail until the "
-        f"transformers/torch environment is fixed. Original error: {exc}",
-        RuntimeWarning,
-        stacklevel=2,
-    )
 
 # TODO(rcadene): Improve policies and envs. As of now, an item in `available_policies`
 # refers to a yaml file AND a modeling name. Same for `available_envs` which refers to
